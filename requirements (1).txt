@@ -1,0 +1,10 @@
+requir="""
+streamlit
+pymupdf
+langchain
+langchain-community
+langchain-openai
+pinecone-client
+python-dotenv
+tiktoken
+pypdf"""
