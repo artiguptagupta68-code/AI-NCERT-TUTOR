@@ -1,7 +1,0 @@
-"""langchain-community==0.4.1
-langchain
-pdfplumber
-PyMuPDF
-pandas
-numpy
-streamlit"""
