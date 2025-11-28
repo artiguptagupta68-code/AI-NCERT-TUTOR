@@ -1,7 +1,0 @@
-streamlit
-langchain-openai
-langchain-community
-langchain-text-splitters
-pinecone-client==5.0.1
-tiktoken
-
