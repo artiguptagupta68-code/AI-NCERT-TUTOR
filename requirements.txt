@@ -1,0 +1,10 @@
+streamlit
+langchain
+langchain-core
+langchain-text-splitters
+
+langchain-communities
+
+pandas
+numpy
+
