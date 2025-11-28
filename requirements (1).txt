@@ -1,0 +1,9 @@
+requir="""
+pymupdf
+streamlit
+langchain
+langchain-community
+langchain-openai
+pinecone-client
+python-dotenv
+tiktoken"""
