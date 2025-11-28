@@ -1,9 +1,0 @@
-req="""streamlit
-langchain
-langchain-community
-langchain-text-splitters
-pdfplumber
-PyMuPDF
-pandas
-numpy
-pydantic"""
