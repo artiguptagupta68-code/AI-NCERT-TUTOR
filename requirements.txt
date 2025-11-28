@@ -1,0 +1,11 @@
+streamlit
+langchain
+langchain-core
+langchain-text-splitters
+langchain-embeddings
+langchain-communities
+pdfplumber
+PyMuPDF
+pandas
+numpy
+
