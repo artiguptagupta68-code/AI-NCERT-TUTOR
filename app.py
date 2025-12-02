@@ -41,10 +41,44 @@ def ensure_folder(path):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
 
+import zipfile
+import os
+
+zip_filename = "ncrt subject.zip"  # make sure this is in current working directory
+extract_folder = "ncrt_subject_extracted"
+os.makedirs(extract_folder, exist_ok=True)
+
+# Use raw string to handle spaces safely
+with zipfile.ZipFile(r"ncrt subject.zip", 'r') as zip_ref:
+    zip_ref.extractall(extract_folder)
+
+print(f"Extracted '{zip_filename}' to '{extract_folder}'")
+
+# List all extracted files
+for root, dirs, files in os.walk(extract_folder):
+    for f in files:
+        print("Extracted file:", os.path.join(root, f))
+
+        
+
+import os
+
+extracted_folder = "ncrt_subject_extracted"
+
+for root, dirs, files in os.walk(extracted_folder):
+    print("In folder:", root)
+    print("Files:", files)
+
+
+doc_files = []
+
+
+
+
 # -------------------------
 # Unzip top-level and nested zips
 # -------------------------
-def extract_top_and_nested(top_zip=ZIP_PATH, dest=EXTRACT_FOLDER):
+"""def extract_top_and_nested(top_zip=ZIP_PATH, dest=EXTRACT_FOLDER):
     if not os.path.exists(top_zip):
         raise FileNotFoundError(f"ZIP file not found at path: {top_zip}")
     # remove old extraction (optional) only if we want fresh
@@ -65,7 +99,7 @@ def extract_top_and_nested(top_zip=ZIP_PATH, dest=EXTRACT_FOLDER):
                     with zipfile.ZipFile(zip_path, "r") as nz:
                         nz.extractall(out_dir)
                 except zipfile.BadZipFile:
-                    st.warning(f"Nested ZIP corrupted or unreadable: {zip_path}")
+                    st.warning(f"Nested ZIP corrupted or unreadable: {zip_path}")"""
 
 # -------------------------
 # Load docs (PDF/TXT) recursively
@@ -276,3 +310,4 @@ if st.button("Get Answer"):
                     st.markdown(f"**Context {i}:** {c[:800]}{'...' if len(c)>800 else ''}")
             except Exception as e:
                 st.error(f"Generation failed: {e}")
+
