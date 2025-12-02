@@ -3,9 +3,9 @@ import zipfile
 import os
 import fitz  # PyMuPDF
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_community.embeddings import HuggingFaceEmbedding
 import faiss
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
