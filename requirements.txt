@@ -1,8 +1,22 @@
-streamlit==1.30.0
-sentence-transformers==2.2.2
-faiss-cpu==1.7.4
-PyMuPDF==1.22.5
-transformers==4.40.0
-accelerate
-torch==2.2.0
-numpy
+# Web framework
+fastapi
+uvicorn[standard]
+
+# LangChain and AI
+langchain
+openai
+
+# Vector store
+faiss-cpu
+
+# PDF / document processing
+PyMuPDF
+python-docx
+unstructured
+
+# Optional: for Streamlit frontend (if you want a nice UI)
+streamlit
+
+# File uploads
+python-multipart
+
