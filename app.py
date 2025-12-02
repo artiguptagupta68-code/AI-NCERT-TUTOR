@@ -41,36 +41,7 @@ def ensure_folder(path):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
 
-import zipfile
-import os
 
-zip_filename = "ncrt subject.zip"  # make sure this is in current working directory
-extract_folder = "ncrt_subject_extracted"
-os.makedirs(extract_folder, exist_ok=True)
-
-# Use raw string to handle spaces safely
-with zipfile.ZipFile(r"ncrt subject.zip", 'r') as zip_ref:
-    zip_ref.extractall(extract_folder)
-
-print(f"Extracted '{zip_filename}' to '{extract_folder}'")
-
-# List all extracted files
-for root, dirs, files in os.walk(extract_folder):
-    for f in files:
-        print("Extracted file:", os.path.join(root, f))
-
-        
-
-import os
-
-extracted_folder = "ncrt_subject_extracted"
-
-for root, dirs, files in os.walk(extracted_folder):
-    print("In folder:", root)
-    print("Files:", files)
-
-
-doc_files = []
 
 
 
