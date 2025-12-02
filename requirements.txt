@@ -1,0 +1,8 @@
+streamlit==1.30.0
+sentence-transformers==2.2.2
+faiss-cpu==1.7.4
+PyMuPDF==1.22.5
+transformers==4.40.0
+accelerate
+torch==2.2.0
+numpy
