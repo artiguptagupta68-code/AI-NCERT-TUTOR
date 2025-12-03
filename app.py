@@ -15,4 +15,4 @@ import streamlit as st
 # ----------------------------
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 ZIP_PATH = "ncert.zip"
-EXTRACT_DIR = "ncert_extract
+EXTRACT_DIR = "ncert_extract"
