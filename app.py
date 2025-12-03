@@ -1,3 +1,16 @@
+%%writefile app.py
+import streamlit as st
+import zipfile
+import os
+import fitz  # PyMuPDF
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
+import faiss
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
 import os
 import zipfile
 import gdown
@@ -86,102 +99,89 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
 
 st.text(f"Loaded {len(documents)} PDF documents.")
 
-# ----------------------------
-# STEP 5: Chunk text
-# ----------------------------
-def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = min(start + chunk_size, len(text))
-        chunk = text[start:end].strip()
-        if chunk:
-            chunks.append(chunk)
-        if end == len(text):
-            break
-        start = end - overlap
-    return chunks
+    # ---------------- Load documents ----------------
+    def load_documents(folder):
+        texts = []
+        for root, dirs, files in os.walk(folder):
+            for file in files:
+                path = os.path.join(root, file)
+                if file.lower().endswith(".pdf"):
+                    try:
+                        doc = fitz.open(path)
+                        text = ""
+                        for page in doc:
+                            text += page.get_text()
+                        texts.append(text)
+                    except Exception as e:
+                        st.warning(f"Failed to read PDF {path}: {e}")
+                elif file.lower().endswith(".txt"):
+                    try:
+                        with open(path, "r", encoding="utf-8") as f:
+                            texts.append(f.read())
+                    except Exception as e:
+                        st.warning(f"Failed to read TXT {path}: {e}")
+        return texts
 
-all_chunks = []
-for doc in documents:
-    doc_id = doc["file"]
-    for i, chunk in enumerate(chunk_text(doc["text"])):
-        all_chunks.append({
-            "doc_id": doc_id,
-            "chunk_id": f"{Path(doc_id).stem}_chunk_{i}",
-            "text": chunk
-        })
+    texts = load_documents(extract_folder)
+   # st.success(f"Loaded {len(texts)} documents.")
 
-#st.text(f"Total chunks: {len(all_chunks)}")
+    if len(texts) == 0:
+        st.warning("No PDF/TXT files found!")
+    else:
+        # ---------------- Split documents ----------------
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = text_splitter.split_text(" ".join(texts))
+       # st.success(f"Created {len(chunks)} text chunks.")
 
-# ----------------------------
-# STEP 6: Create embeddings and FAISS index
-# ----------------------------
-embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-texts = [c["text"] for c in all_chunks]
-embeddings = embed_model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
-d = embeddings.shape[1]
-index = faiss.IndexFlatL2(d)
-index.add(embeddings)
-metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
-st.text("FAISS index built.")
+        # ---------------- Embeddings & FAISS ----------------
+        embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        embeddings = embedding_model.embed_documents(chunks)
 
-# ----------------------------
-# STEP 7: Load generator
-# ----------------------------
-device = 0 if torch.cuda.is_available() else -1
-tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
-gen_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
-if device == 0:
-    gen_model = gen_model.to("cuda")
-generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenizer, device=device)
+        embedding_dim = len(embeddings[0])
+        index = faiss.IndexFlatL2(embedding_dim)
+        embedding_matrix = np.array(embeddings).astype("float32")
+        index.add(embedding_matrix)
 
-# ----------------------------
-# STEP 8: RAG functions
-# ----------------------------
-def retrieve(query, top_k=TOP_K):
-    q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
-    D, I = index.search(q_emb, top_k)
-    return [metadata[idx] for idx in I[0]]
+        faiss_index = {
+            "index": index,
+            "chunks": chunks
+        }
+        #st.success("FAISS index created!")
 
-def build_prompt(retrieved_chunks, question, max_context_chars=3000):
-    ctx_parts = []
-    total = 0
-    for r in retrieved_chunks:
-        t = r["text"].strip()
-        if not t:
-            continue
-        remaining = max_context_chars - total
-        if remaining <= 0:
-            break
-        if len(t) > remaining:
-            t = t[:remaining]
-        ctx_parts.append(f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n")
-        total += len(t)
-    context = "\n---\n".join(ctx_parts)
-    prompt = (
-        "You are an AI tutor specialized in NCERT content. Use the provided context excerpts to answer the question accurately.\n\n"
-        f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer concisely and clearly:"
-    )
-    return prompt
+        # ---------------- User query ----------------
+        query = st.text_input("Ask a question about the content:")
 
-def generate_answer(query):
-    retrieved = retrieve(query)
-    if not retrieved:
-        return {"answer": "No relevant documents found.", "sources": []}
-    prompt = build_prompt(retrieved, query)
-    out = generator(prompt, max_length=256, do_sample=False)[0]["generated_text"]
-    sources = [{"doc_id": r["doc_id"], "chunk_id": r["chunk_id"]} for r in retrieved]
-    return {"answer": out.strip(), "sources": sources}
+        if query:
+            # Retrieve top 5 relevant chunks
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            query_embedding = model.encode([query], convert_to_numpy=True)
+            D, I = index.search(query_embedding.astype("float32"), k=5)
+            retrieved_chunks = [chunks[i] for i in I[0]]
+            context = "\n\n".join(retrieved_chunks)
 
-# ----------------------------
-# STEP 9: Streamlit Query Interface
-# ----------------------------
-query = st.text_input("Ask a question about NCERT content:")
-if query:
-    with st.spinner("Generating answer..."):
-        result = generate_answer(query)
-        st.write("**Answer:**", result["answer"])
-        st.write("**Sources:**")
-        for src in result["sources"]:
-            st.write(f"{src['doc_id']} / {src['chunk_id']}")
+            # ---------------- LLM Answer Generation ----------------
+            # CPU-friendly model
+            llm_model_name = "facebook/opt-125m"  # CPU-friendly
+
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
+
+            # Load model (no device_map)
+            llm_model = AutoModelForCausalLM.from_pretrained(llm_model_name)
+
+            # Force CPU
+            llm_model.to("cpu")
+
+            input_text = f"Answer the question based on the following context:\n{context}\nQuestion: {query}"
+            inputs = tokenizer(input_text, return_tensors="pt")
+            with torch.no_grad():
+                outputs = llm_model.generate(
+                    **inputs,
+                    max_new_tokens=300,
+                    temperature=0.7,
+                    do_sample=True
+                )
+            answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            st.subheader("Answer:")
+            st.write(answer)
