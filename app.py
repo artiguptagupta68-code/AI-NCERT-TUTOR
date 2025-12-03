@@ -19,7 +19,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 # ----------------------------
 # Replace with your file ID if you want auto-download from Google Drive
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
-DEFAULT_ZIP_NAME = "ncrt.zip"
+DEFAULT_ZIP_NAME = "ncrt subject.zip"
 EXTRACT_DIR = "ncert_extracted"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
