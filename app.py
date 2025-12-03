@@ -1,7 +1,7 @@
 import os
 import zipfile
 import gdown
-from langchain_community.vectorstores import FAISS
+from langchain.vectorstores import FAISS
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
