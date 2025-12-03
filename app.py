@@ -50,7 +50,7 @@ else:
 os.makedirs(EXTRACT_DIR, exist_ok=True)
 with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
     zip_ref.extractall(EXTRACT_DIR)
-#st.text(f"ZIP extracted to: {EXTRACT_DIR}")
+st.text(f"ZIP extracted to: {EXTRACT_DIR}")
 
 # Handle nested ZIPs (like class 11/12 PDFs inside)
 for root, dirs, files in os.walk(EXTRACT_DIR):
