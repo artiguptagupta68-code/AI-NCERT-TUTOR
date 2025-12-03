@@ -6,7 +6,7 @@ import fitz  # PyMuPDF
 import numpy as np
 from sentence_transformers import SentenceTransformer
 #from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+#from langchain_community.embeddings import HuggingFaceEmbeddings
 import faiss
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
