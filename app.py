@@ -25,15 +25,15 @@ TOP_K = 4
 # ----------------------------
 # STEP 0: Streamlit UI for info
 # ----------------------------
-st.title("NCERT AI Tutor")
-st.text("Downloading and extracting NCERT ZIP from Google Drive...")
+st.title("🤖 NCERT AI Tutor")
+#st.text("Downloading and extracting NCERT ZIP from Google Drive...")
 
 # ----------------------------
 # STEP 1: Download ZIP
 # ----------------------------
 if not os.path.exists(ZIP_PATH):
     gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", ZIP_PATH, quiet=False)
-st.text("Download completed.")
+#st.text("Download completed.")
 
 # ----------------------------
 # STEP 2: Validate ZIP
@@ -42,7 +42,7 @@ if not zipfile.is_zipfile(ZIP_PATH):
     st.error(f"{ZIP_PATH} is not a valid ZIP file. Check Google Drive link or permissions.")
     st.stop()
 else:
-    st.text("ZIP file is valid!")
+    #st.text("ZIP file is valid!")
 
 # ----------------------------
 # STEP 3: Extract ZIP
@@ -50,7 +50,7 @@ else:
 os.makedirs(EXTRACT_DIR, exist_ok=True)
 with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
     zip_ref.extractall(EXTRACT_DIR)
-st.text(f"ZIP extracted to: {EXTRACT_DIR}")
+#st.text(f"ZIP extracted to: {EXTRACT_DIR}")
 
 # Handle nested ZIPs (like class 11/12 PDFs inside)
 for root, dirs, files in os.walk(EXTRACT_DIR):
@@ -62,7 +62,7 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
             with zipfile.ZipFile(nested_zip_path, 'r') as nz:
                 nz.extractall(nested_extract_dir)
 
-st.text("All nested ZIPs extracted.")
+#st.text("All nested ZIPs extracted.")
 
 # ----------------------------
 # STEP 4: Read PDFs
@@ -84,7 +84,7 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
             except Exception as e:
                 st.warning(f"Failed to read PDF: {file}, {e}")
 
-st.text(f"Loaded {len(documents)} PDF documents.")
+#st.text(f"Loaded {len(documents)} PDF documents.")
 
 # ----------------------------
 # STEP 5: Chunk text
@@ -112,7 +112,7 @@ for doc in documents:
             "text": chunk
         })
 
-st.text(f"Total chunks: {len(all_chunks)}")
+#st.text(f"Total chunks: {len(all_chunks)}")
 
 # ----------------------------
 # STEP 6: Create embeddings and FAISS index
@@ -124,7 +124,7 @@ d = embeddings.shape[1]
 index = faiss.IndexFlatL2(d)
 index.add(embeddings)
 metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
-st.text("FAISS index built.")
+#st.text("FAISS index built.")
 
 # ----------------------------
 # STEP 7: Load generator
