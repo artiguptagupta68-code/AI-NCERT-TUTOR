@@ -1,242 +1,294 @@
+# app.py — Optimized NCERT AI Tutor (Option B)
 import os
-import zipfile
-import gdown
 from pathlib import Path
+import zipfile
+import io
+import time
+
+import streamlit as st
 from pypdf import PdfReader
+import gdown
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import faiss
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
-import streamlit as st
 
 # ----------------------------
 # CONFIG
 # ----------------------------
+# Replace with your file ID if you want auto-download from Google Drive
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
-ZIP_PATH = "ncrt subject.zip"
+DEFAULT_ZIP_NAME = "ncrt.zip"
 EXTRACT_DIR = "ncert_extracted"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 GEN_MODEL_NAME = "google/flan-t5-base"
 TOP_K = 4
+MAX_CONTEXT_CHARS = 1800  # keep prompts small to avoid OOM
+MIN_ZIP_BYTES = 1024
+
+st.set_page_config(page_title="NCERT AI Tutor", page_icon="🤖", layout="wide")
 
 # ----------------------------
-# STEP 0: Streamlit UI for info
+# Header
 # ----------------------------
-st.title("NCERT AI Tutor")
-st.text("Downloading and extracting NCERT ZIP from Google Drive...")
+st.markdown(
+    """
+    <div style="text-align:center">
+      <h1 style="color:#2B3467">🤖 NCERT AI Tutor</h1>
+      <p style="color:#4B5563;margin-top:-10px">Ask questions from your NCERT textbooks — instant, sourced answers.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.sidebar.header("Settings")
+top_k = st.sidebar.slider("Top-K retrieved chunks", 1, 8, TOP_K)
+chunk_size = st.sidebar.number_input("Chunk size (chars)", 200, 2000, CHUNK_SIZE, step=50)
+chunk_overlap = st.sidebar.number_input("Chunk overlap (chars)", 0, 500, CHUNK_OVERLAP, step=10)
+st.sidebar.write("Model:", EMBEDDING_MODEL_NAME, " | Generator:", GEN_MODEL_NAME)
 
 # ----------------------------
-# STEP 1: Download ZIP
+# Helpers & Caching
 # ----------------------------
-if not os.path.exists(ZIP_PATH):
-    gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", ZIP_PATH, quiet=False)
-st.text("Download completed.")
+@st.cache_resource(show_spinner=False)
+def load_embedding_model(name=EMBEDDING_MODEL_NAME):
+    return SentenceTransformer(name)
+
+@st.cache_resource(show_spinner=False)
+def load_generator_model(name=GEN_MODEL_NAME):
+    device = 0 if torch.cuda.is_available() else -1
+    tokenizer = AutoTokenizer.from_pretrained(name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(name)
+    if device == 0:
+        model = model.to("cuda")
+    gen = pipeline("text2text-generation", model=model, tokenizer=tokenizer, device=device)
+    return gen, tokenizer
+
+@st.cache_resource(show_spinner=False)
+def create_faiss_index(embeddings_np):
+    d = embeddings_np.shape[1]
+    index = faiss.IndexFlatL2(d)
+    index.add(embeddings_np)
+    return index
+
+def safe_extract_zip(zip_bytes_io, extract_to):
+    # helper to extract from bytes buffer
+    with zipfile.ZipFile(zip_bytes_io) as zf:
+        zf.extractall(extract_to)
 
 # ----------------------------
-# STEP 2: Validate ZIP
+# Data loading: Download or upload
 # ----------------------------
-if not zipfile.is_zipfile(ZIP_PATH):
-    st.error(f"{ZIP_PATH} is not a valid ZIP file. Check Google Drive link or permissions.")
-    st.stop()
+st.markdown("### Load NCERT ZIP")
+col1, col2 = st.columns([2, 3])
+with col1:
+    st.write("Auto-download from Google Drive (optional)")
+    if st.button("Download from Google Drive"):
+        try:
+            url = f"https://drive.google.com/uc?id={FILE_ID}"
+            st.info("Starting download...")
+            gdown.download(url, DEFAULT_ZIP_NAME, quiet=False, fuzzy=True)
+            st.success("Download finished.")
+        except Exception as e:
+            st.error(f"Download failed: {e}")
+with col2:
+    uploaded_file = st.file_uploader("Or upload `ncrt.zip` / your ZIP file here", type=["zip"])
+
+zip_path = Path(DEFAULT_ZIP_NAME)
+# If user uploaded a zip, save it
+if uploaded_file is not None:
+    zip_path = Path(EXTRACT_DIR) / "uploaded_ncert.zip"
+    os.makedirs(EXTRACT_DIR, exist_ok=True)
+    with open(zip_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    st.success(f"Uploaded and saved to {zip_path}")
+
+# If the downloaded zip exists and is valid, proceed; else ask to upload
+proceed = False
+if zip_path.exists() and zip_path.stat().st_size >= MIN_ZIP_BYTES and zipfile.is_zipfile(zip_path):
+    proceed = True
 else:
-    st.text("ZIP file is valid!")
+    st.warning("No valid ZIP found locally. Use the uploader above or press Download from Google Drive then upload if needed.")
+
+if not proceed:
+    st.stop()
 
 # ----------------------------
-# STEP 3: Extract ZIP
+# Extract ZIP (with caching using last-modified timestamp)
 # ----------------------------
-os.makedirs(EXTRACT_DIR, exist_ok=True)
-with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
-    zip_ref.extractall(EXTRACT_DIR)
-st.text(f"ZIP extracted to: {EXTRACT_DIR}")
+extract_dir = Path(EXTRACT_DIR)
+# Clear or create extraction dir
+if extract_dir.exists():
+    # keep existing extraction if present
+    pass
+else:
+    extract_dir.mkdir(parents=True, exist_ok=True)
 
-# Handle nested ZIPs (like class 11/12 PDFs inside)
-for root, dirs, files in os.walk(EXTRACT_DIR):
-    for file in files:
-        if file.lower().endswith(".zip"):
-            nested_zip_path = os.path.join(root, file)
-            nested_extract_dir = os.path.join(root, Path(file).stem)
-            os.makedirs(nested_extract_dir, exist_ok=True)
-            with zipfile.ZipFile(nested_zip_path, 'r') as nz:
-                nz.extractall(nested_extract_dir)
+with zipfile.ZipFile(zip_path, "r") as zf:
+    zf.extractall(extract_dir)
+st.success(f"ZIP extracted to: {extract_dir}")
 
-st.text("All nested ZIPs extracted.")
+# Handle nested zips
+def extract_nested(base_dir):
+    for root, _, files in os.walk(base_dir):
+        for f in files:
+            if f.lower().endswith(".zip"):
+                nested = Path(root) / f
+                nested_dir = Path(root) / nested.stem
+                nested_dir.mkdir(exist_ok=True)
+                try:
+                    with zipfile.ZipFile(nested, 'r') as nz:
+                        nz.extractall(nested_dir)
+                except Exception:
+                    # ignore bad nested zips
+                    continue
 
-# ----------------------------
-# STEP 4: Read PDFs
-# ----------------------------
-documents = []
-for root, dirs, files in os.walk(EXTRACT_DIR):
-    for file in files:
-        if file.lower().endswith(".pdf"):
-            path = os.path.join(root, file)
-            try:
-                reader = PdfReader(path)
-                text = ""
-                for page in reader.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-                if text.strip():
-                    documents.append({"file": file, "text": text})
-            except Exception as e:
-                st.warning(f"Failed to read PDF: {file}, {e}")
-
-st.text(f"Loaded {len(documents)} PDF documents.")
+extract_nested(extract_dir)
 
 # ----------------------------
-# STEP 5: Chunk text
+# Read PDFs into documents list (caching)
+# ----------------------------
+@st.cache_data(show_spinner=False)
+def load_documents_from_folder(folder):
+    docs = []
+    for root, _, files in os.walk(folder):
+        for fname in files:
+            if fname.lower().endswith(".pdf"):
+                fpath = Path(root) / fname
+                try:
+                    reader = PdfReader(str(fpath))
+                    text_parts = []
+                    for p in reader.pages:
+                        txt = p.extract_text()
+                        if txt:
+                            text_parts.append(txt)
+                    full_text = "\n".join(text_parts).strip()
+                    if full_text:
+                        docs.append({"file": fname, "text": full_text})
+                except Exception as e:
+                    # skip problematic pdfs
+                    st.warning(f"Failed to load {fname}: {e}")
+    return docs
+
+with st.spinner("Loading PDF documents..."):
+    documents = load_documents_from_folder(extract_dir)
+st.success(f"Loaded {len(documents)} PDF documents.")
+
+if len(documents) == 0:
+    st.error("No PDF documents found in the extracted ZIP. Please upload a ZIP with PDFs.")
+    st.stop()
+
+# ----------------------------
+# Chunking
 # ----------------------------
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     chunks = []
     start = 0
-    while start < len(text):
-        end = min(start + chunk_size, len(text))
+    L = len(text)
+    while start < L:
+        end = min(start + chunk_size, L)
         chunk = text[start:end].strip()
         if chunk:
             chunks.append(chunk)
-        if end == len(text):
+        if end == L:
             break
         start = end - overlap
     return chunks
 
 all_chunks = []
 for doc in documents:
-    doc_id = doc["file"]
-    for i, chunk in enumerate(chunk_text(doc["text"])):
+    chunks = chunk_text(doc["text"], chunk_size=chunk_size, overlap=chunk_overlap)
+    for i, c in enumerate(chunks):
         all_chunks.append({
-            "doc_id": doc_id,
-            "chunk_id": f"{Path(doc_id).stem}_chunk_{i}",
-            "text": chunk
+            "doc_id": doc["file"],
+            "chunk_id": f"{Path(doc['file']).stem}_chunk_{i}",
+            "text": c
         })
 
-st.text(f"Total chunks: {len(all_chunks)}")
+st.info(f"Total chunks: {len(all_chunks)}")
 
 # ----------------------------
-# STEP 6: Create embeddings and FAISS index
+# Build embeddings and FAISS index (cached)
 # ----------------------------
-embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-texts = [c["text"] for c in all_chunks]
-embeddings = embed_model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
-d = embeddings.shape[1]
-index = faiss.IndexFlatL2(d)
-index.add(embeddings)
-metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
-st.text("FAISS index built.")
+embed_model = load_embedding_model()
+
+@st.cache_resource(show_spinner=False)
+def build_index_and_metadata(chunks):
+    texts = [c["text"] for c in chunks]
+    if len(texts) == 0:
+        return None, None, None
+    embeddings = embed_model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
+    index = create_faiss_index(np.array(embeddings))
+    metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in chunks]
+    return index, embeddings, metadata
+
+with st.spinner("Creating embeddings and FAISS index (cached)..."):
+    index, embeddings_matrix, metadata = build_index_and_metadata(all_chunks)
+
+if index is None:
+    st.error("Failed to build FAISS index.")
+    st.stop()
+
+st.success("FAISS index built.")
 
 # ----------------------------
-# STEP 7: Load generator model
+# Load generator
 # ----------------------------
-device = 0 if torch.cuda.is_available() else -1
-tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
-gen_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
-
-if device == 0:
-    gen_model = gen_model.to("cuda")
-
-generator = pipeline(
-    "text2text-generation",
-    model=gen_model,
-    tokenizer=tokenizer,
-    device=device
-)
+with st.spinner("Loading generator model..."):
+    generator, gen_tokenizer = load_generator_model()
 
 # ----------------------------
-# STEP 8: RAG functions
+# RAG functions
 # ----------------------------
-def retrieve(query, top_k=TOP_K):
+def retrieve(query, top_k=top_k):
     q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
     D, I = index.search(q_emb, top_k)
-
     retrieved = []
     for idx in I[0]:
-        retrieved.append({
-            "doc_id": metadata[idx]["doc_id"],
-            "chunk_id": metadata[idx]["chunk_id"],
-            "text": metadata[idx]["text"]
-        })
+        if idx < len(metadata):
+            retrieved.append(metadata[idx])
     return retrieved
 
-
-def build_prompt(retrieved_chunks, question, max_context_chars=3000):
+def build_prompt(retrieved_chunks, question, max_context_chars=MAX_CONTEXT_CHARS):
     ctx_parts = []
     total = 0
-
     for r in retrieved_chunks:
-        t = r["text"].strip()
+        t = (r.get("text") or "").strip()
         if not t:
             continue
-
         remaining = max_context_chars - total
         if remaining <= 0:
             break
-
         if len(t) > remaining:
             t = t[:remaining]
-
-        ctx_parts.append(
-            f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n"
-        )
+        ctx_parts.append(f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n")
         total += len(t)
-
+    if len(ctx_parts) == 0:
+        return question  # fallback to only question
     context = "\n---\n".join(ctx_parts)
-
     prompt = (
-        "You are an AI tutor specialized in NCERT content. "
-        "Use the provided context excerpts to answer the question accurately.\n\n"
-        f"CONTEXT:\n{context}\n\n"
-        f"QUESTION: {question}\n\n"
-        "ANSWER concisely:"
+        "You are an AI tutor specialized in NCERT textbooks. Use ONLY the provided context excerpts to answer the question.\n\n"
+        f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer concisely and clearly. If answer not found in context, say 'Information not available in NCERT excerpts provided.'"
     )
     return prompt
 
-
 def generate_answer(query):
-    retrieved = retrieve(query)
-
+    retrieved = retrieve(query, top_k=top_k)
     if not retrieved:
-        return {
-            "answer": "No relevant NCERT content found.",
-            "sources": []
-        }
-
+        return {"answer": "No relevant documents found in NCERT content.", "sources": []}
     prompt = build_prompt(retrieved, query)
+    try:
+        out = generator(prompt, max_length=256, do_sample=False)[0]
+        # Some pipelines return "generated_text" or "text"
+        out_text = out.get("generated_text") if isinstance(out, dict) else str(out)
+        if not out_text:
+            out_text = out.get("text", "")
+    except Exception as e:
+        return {"answer": f"Generation error: {e}", "sources": []}
+    sources = [{"doc_id": r["doc_id"], "chunk_id": r["chunk_id"]} for r in retrieved]
+    return {"answer": out_text.strip(), "sources": sources}
 
-    output = generator(
-        prompt,
-        max_length=256,
-        do_sample=False
-    )[0]["generated_text"]
-
-    sources = []
-    for r in retrieved:
-        sources.append({
-            "doc_id": r["doc_id"],
-            "chunk_id": r["chunk_id"]
-        })
-
-    return {
-        "answer": output.strip(),
-        "sources": sources
-    }
-
-
-# ----------------------------
-# STEP 9: Streamlit UI
-# ----------------------------
-st.subheader("Ask NCERT AI Tutor")
-
-query = st.text_input("Enter your question:")
-
-if query:
-    with st.spinner("Generating answer..."):
-        result = generate_answer(query)
-
-        st.write("### **Answer:**")
-        st.write(result["answer"])
-
-        st.write("### **Sources used:**")
-        for s in result["sources"]:
-            st.write(f"- Document {s['doc_id']} | Chunk {s['chunk_id']}")
+# ---------------
