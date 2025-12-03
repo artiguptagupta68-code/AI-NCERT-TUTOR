@@ -6,6 +6,11 @@ transformers
 torch
 pypdf
 gdown
+streamlit
+langchain
+faiss-cpu
+PyPDF2
+
 
 
 
