@@ -33,7 +33,7 @@ st.title("🤖 NCERT AI Tutor")
 # ----------------------------
 if not os.path.exists(ZIP_PATH):
     gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", ZIP_PATH, quiet=False)
-#st.text("Download completed.")
+st.text("Download completed.")
 
 # ----------------------------
 # STEP 2: Validate ZIP
@@ -42,7 +42,7 @@ if not zipfile.is_zipfile(ZIP_PATH):
     st.error(f"{ZIP_PATH} is not a valid ZIP file. Check Google Drive link or permissions.")
     st.stop()
 else:
-    #st.text("ZIP file is valid!")
+    st.text("ZIP file is valid!")
 
 # ----------------------------
 # STEP 3: Extract ZIP
@@ -84,7 +84,7 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
             except Exception as e:
                 st.warning(f"Failed to read PDF: {file}, {e}")
 
-#st.text(f"Loaded {len(documents)} PDF documents.")
+st.text(f"Loaded {len(documents)} PDF documents.")
 
 # ----------------------------
 # STEP 5: Chunk text
@@ -124,7 +124,7 @@ d = embeddings.shape[1]
 index = faiss.IndexFlatL2(d)
 index.add(embeddings)
 metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
-#st.text("FAISS index built.")
+st.text("FAISS index built.")
 
 # ----------------------------
 # STEP 7: Load generator
