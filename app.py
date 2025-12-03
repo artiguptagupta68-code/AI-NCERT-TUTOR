@@ -21,25 +21,45 @@ CHUNK_OVERLAP = 150
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 GEN_MODEL_NAME = "google/flan-t5-base"
 TOP_K = 4
+MIN_ZIP_SIZE = 1024  # bytes
 
 # ----------------------------
-# STEP 0: Streamlit UI for info
+# STEP 0: Streamlit UI
 # ----------------------------
 st.title("NCERT AI Tutor")
-st.text("Downloading and extracting NCERT ZIP from Google Drive...")
+st.text("Checking NCERT ZIP file...")
 
 # ----------------------------
-# STEP 1: Download ZIP
+# STEP 1: Download ZIP if missing or invalid
 # ----------------------------
-if not os.path.exists(ZIP_PATH):
-    gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", ZIP_PATH, quiet=False)
-st.text("Download completed.")
+def download_zip():
+    st.text("Downloading NCERT ZIP from Google Drive...")
+    try:
+        gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", ZIP_PATH, quiet=False, fuzzy=True)
+    except Exception as e:
+        st.error(f"Failed to download ZIP: {e}")
+        return False
+    return True
+
+if not os.path.exists(ZIP_PATH) or os.path.getsize(ZIP_PATH) < MIN_ZIP_SIZE:
+    st.warning("ZIP file missing or too small. Attempting to download...")
+    success = download_zip()
+    if not success or not zipfile.is_zipfile(ZIP_PATH):
+        st.error(
+            f"{ZIP_PATH} is not a valid ZIP file.\n"
+            "Please check the Google Drive file ID or permissions, or download manually "
+            "and place it in the same directory as this app."
+        )
+        st.stop()
 
 # ----------------------------
 # STEP 2: Validate ZIP
 # ----------------------------
 if not zipfile.is_zipfile(ZIP_PATH):
-    st.error(f"{ZIP_PATH} is not a valid ZIP file. Check Google Drive link or permissions.")
+    st.error(
+        f"{ZIP_PATH} is not a valid ZIP file.\n"
+        "Please check the Google Drive file ID or permissions, or download manually."
+    )
     st.stop()
 else:
     st.text("ZIP file is valid!")
@@ -52,7 +72,7 @@ with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
     zip_ref.extractall(EXTRACT_DIR)
 st.text(f"ZIP extracted to: {EXTRACT_DIR}")
 
-# Handle nested ZIPs (like class 11/12 PDFs inside)
+# Handle nested ZIPs
 for root, dirs, files in os.walk(EXTRACT_DIR):
     for file in files:
         if file.lower().endswith(".zip"):
@@ -61,7 +81,6 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
             os.makedirs(nested_extract_dir, exist_ok=True)
             with zipfile.ZipFile(nested_zip_path, 'r') as nz:
                 nz.extractall(nested_extract_dir)
-
 st.text("All nested ZIPs extracted.")
 
 # ----------------------------
