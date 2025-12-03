@@ -2,7 +2,7 @@ import os
 import zipfile
 import gdown
 import faiss
-from langchain_community.embeddings import SentenceTransformerEmbeddings
+from sentence_transformers import SentenceTransformer
 import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyMuPDFLoader
