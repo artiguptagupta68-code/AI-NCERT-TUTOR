@@ -114,15 +114,14 @@ def load_documents(folder):
                         texts.append(text)
                 except Exception as e:
                         st.warning(f"Failed to read PDF {path}: {e}")
-                elif file.lower().endswith(".txt"):
-                    try:
-                        with open(path, "r", encoding="utf-8") as f:
-                            texts.append(f.read())
-                    except Exception as e:
-                        st.warning(f"Failed to read TXT {path}: {e}")
-        return texts
-
-    texts = load_documents(extract_folder)
+            elif file.lower().endswith(".txt"):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        texts.append(f.read())
+                except Exception as e:
+                    st.warning(f"Failed to read TXT {path}: {e}")
+                    return texts
+                    texts = load_documents(extract_folder)
    # st.success(f"Loaded {len(texts)} documents.")
 
     if len(texts) == 0:
