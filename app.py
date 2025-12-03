@@ -100,19 +100,19 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
 st.text(f"Loaded {len(documents)} PDF documents.")
 
     # ---------------- Load documents ----------------
-    def load_documents(folder):
-        texts = []
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                path = os.path.join(root, file)
-                if file.lower().endswith(".pdf"):
-                    try:
-                        doc = fitz.open(path)
-                        text = ""
-                        for page in doc:
-                            text += page.get_text()
+def load_documents(folder):
+    texts = []
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            path = os.path.join(root, file)
+            if file.lower().endswith(".pdf"):
+                try:
+                    doc = fitz.open(path)
+                    text = ""
+                    for page in doc:
+                        text += page.get_text()
                         texts.append(text)
-                    except Exception as e:
+                except Exception as e:
                         st.warning(f"Failed to read PDF {path}: {e}")
                 elif file.lower().endswith(".txt"):
                     try:
