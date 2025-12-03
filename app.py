@@ -127,14 +127,21 @@ metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]
 st.text("FAISS index built.")
 
 # ----------------------------
-# STEP 7: Load generator
+# STEP 7: Load generator model
 # ----------------------------
 device = 0 if torch.cuda.is_available() else -1
 tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
 gen_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
+
 if device == 0:
     gen_model = gen_model.to("cuda")
-generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenizer, device=device)
+
+generator = pipeline(
+    "text2text-generation",
+    model=gen_model,
+    tokenizer=tokenizer,
+    device=device
+)
 
 # ----------------------------
 # STEP 8: RAG functions
@@ -142,46 +149,94 @@ generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenize
 def retrieve(query, top_k=TOP_K):
     q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
     D, I = index.search(q_emb, top_k)
-    return [metadata[idx] for idx in I[0]]
+
+    retrieved = []
+    for idx in I[0]:
+        retrieved.append({
+            "doc_id": metadata[idx]["doc_id"],
+            "chunk_id": metadata[idx]["chunk_id"],
+            "text": metadata[idx]["text"]
+        })
+    return retrieved
+
 
 def build_prompt(retrieved_chunks, question, max_context_chars=3000):
     ctx_parts = []
     total = 0
+
     for r in retrieved_chunks:
         t = r["text"].strip()
         if not t:
             continue
+
         remaining = max_context_chars - total
         if remaining <= 0:
             break
+
         if len(t) > remaining:
             t = t[:remaining]
-        ctx_parts.append(f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n")
+
+        ctx_parts.append(
+            f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n"
+        )
         total += len(t)
+
     context = "\n---\n".join(ctx_parts)
+
     prompt = (
-        "You are an AI tutor specialized in NCERT content. Use the provided context excerpts to answer the question accurately.\n\n"
-        f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer concisely and clearly:"
+        "You are an AI tutor specialized in NCERT content. "
+        "Use the provided context excerpts to answer the question accurately.\n\n"
+        f"CONTEXT:\n{context}\n\n"
+        f"QUESTION: {question}\n\n"
+        "ANSWER concisely:"
     )
     return prompt
 
+
 def generate_answer(query):
     retrieved = retrieve(query)
+
     if not retrieved:
-        return {"answer": "No relevant documents found.", "sources": []}
+        return {
+            "answer": "No relevant NCERT content found.",
+            "sources": []
+        }
+
     prompt = build_prompt(retrieved, query)
-    out = generator(prompt, max_length=256, do_sample=False)[0]["generated_text"]
-    sources = [{"doc_id": r["doc_id"], "chunk_id": r["chunk_id"]} for r in retrieved]
-    return {"answer": out.strip(), "sources": sources}
+
+    output = generator(
+        prompt,
+        max_length=256,
+        do_sample=False
+    )[0]["generated_text"]
+
+    sources = []
+    for r in retrieved:
+        sources.append({
+            "doc_id": r["doc_id"],
+            "chunk_id": r["chunk_id"]
+        })
+
+    return {
+        "answer": output.strip(),
+        "sources": sources
+    }
+
 
 # ----------------------------
-# STEP 9: Streamlit Query Interface
+# STEP 9: Streamlit UI
 # ----------------------------
-query = st.text_input("Ask a question about NCERT content:")
+st.subheader("Ask NCERT AI Tutor")
+
+query = st.text_input("Enter your question:")
+
 if query:
     with st.spinner("Generating answer..."):
         result = generate_answer(query)
-        st.write("**Answer:**", result["answer"])
-        st.write("**Sources:**")
-        for src in result["sources"]:
-            st.write(f"{src['doc_id']} / {src['chunk_id']}")
+
+        st.write("### **Answer:**")
+        st.write(result["answer"])
+
+        st.write("### **Sources used:**")
+        for s in result["sources"]:
+            st.write(f"- Document {s['doc_id']} | Chunk {s['chunk_id']}")
