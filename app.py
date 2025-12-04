@@ -123,19 +123,28 @@ chunks = splitter.split_text(" ".join(texts))
 embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 embeddings = embed_model.embed_documents(chunks)
 all_text = " ".join(texts).strip()
-doc = fitz.open("ncert_extracted")
+extract_folder = "ncert_extracted"
+
+pdf_files = [os.path.join(root, f)
+             for root, dirs, files in os.walk(extract_folder)
+             for f in files if f.lower().endswith(".pdf")]
+
 texts = []
-for pdf_file in pdf_files:
-    doc = fitz.open(pdf_file)
-    text = ""
-    for page in doc:
-        page_text = page.get_text()
-        if page_text:
-            text += page_text
-    if text.strip():
-        texts.append(text)
 
+for pdf_path in pdf_files:
+    try:
+        doc = fitz.open(pdf_path)
+        text = ""
+        for page in doc:
+            page_text = page.get_text()
+            if page_text:
+                text += page_text + "\n"
+        if text.strip():
+            texts.append(text)
+    except Exception as e:
+        print(f"Failed to read {pdf_path}: {e}")
 
+print(f"Loaded {len(texts)} PDFs with readable text")
 
 dim = len(embeddings[0])
 index = faiss.IndexFlatL2(dim)
