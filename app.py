@@ -16,18 +16,26 @@ st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
 st.title("📚 AI NCERT Tutor")
 
 # ---------------- Google Drive CONFIG ----------------
-FILE_ID = "YOUR_FILE_ID_HERE"  # Replace with your Google Drive file ID
+FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 ZIP_PATH = "/tmp/ncrt.zip"
 EXTRACT_FOLDER = "/tmp/ncert_extracted"
 
 # ---------------- Download ZIP from Drive ----------------
 if not os.path.exists(ZIP_PATH):
-    url = f"https://drive.google.com/uc?id={FILE_ID}"
+    download_url = f"https://drive.google.com/uc?id={FILE_ID}"
+    st.info("Downloading NCERT ZIP from Google Drive...")
     try:
-        gdown.download(url, ZIP_PATH, quiet=False)
+        gdown.download(download_url, ZIP_PATH, quiet=False)
     except Exception as e:
-        st.error(f"Failed to download ZIP from Google Drive: {e}")
+        st.error(
+            f"Failed to download ZIP from Google Drive: {e}\n\n"
+            "Please check:\n"
+            "1. The file is shared with 'Anyone with the link can view'\n"
+            "2. The FILE_ID is correct\n"
+            "3. You can manually download the file and place it in /tmp/ncert.zip"
+        )
         st.stop()
+
 
 # ---------------- Extract ZIP ----------------
 os.makedirs(EXTRACT_FOLDER, exist_ok=True)
