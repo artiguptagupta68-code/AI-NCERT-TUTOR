@@ -17,7 +17,7 @@ st.title("📘 AI NCERT Tutor (Google Drive → RAG)")
 # Put your file ID here
 GOOGLE_FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 
-ZIP_PATH = "/tmp/ncert.zip"
+ZIP_PATH = "/tmp/ncrt.zip"
 EXTRACT_DIR = "/tmp/ncert_extracted"
 
 # ---------------- OpenAI API ----------------
