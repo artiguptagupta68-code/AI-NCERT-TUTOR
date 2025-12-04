@@ -18,7 +18,7 @@ st.title("📚 AI NCERT Tutor")
 # ---------------- Google Drive Direct Download ----------------
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 DIRECT_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
-ZIP_PATH = "/tmp/ncrt.zip"
+ZIP_PATH = "/tmp/ncert.zip"
 
 def silent_drive_download():
     """Download ZIP file quietly without showing anything on UI."""
