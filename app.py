@@ -143,6 +143,7 @@ st.text(f"Total chunks: {len(all_chunks)}")
 
 # ----------------------------
 # ---------------- Embeddings & FAISS ----------------
+chunks = text_splitter.split_text(" ".join(texts))
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 embeddings = embedding_model.embed_documents(chunks)
 
