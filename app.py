@@ -6,18 +6,18 @@ from pypdf import PdfReader
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import faiss
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 import torch
 import gdown
 
 # ---------------- CONFIG ----------------
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
-ZIP_PATH = "/tmp/ncrt.zip"
+ZIP_PATH = "/tmp/ncert.zip"
 EXTRACT_DIR = "/tmp/ncert_extracted"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-LLM_MODEL_NAME = "facebook/opt-125m"
+GEN_MODEL_NAME = "google/flan-t5-base"
 TOP_K = 4
 
 st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
@@ -125,8 +125,8 @@ st.success("FAISS index built.")
 @st.cache_resource
 def load_generator():
     device = 0 if torch.cuda.is_available() else -1
-    tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME)
-    model = AutoModelForCausalLM.from_pretrained(LLM_MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
+    model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
     if device == 0:
         model = model.to("cuda")
     generator = pipeline("text2text-generation", model=model, tokenizer=tokenizer, device=device)
