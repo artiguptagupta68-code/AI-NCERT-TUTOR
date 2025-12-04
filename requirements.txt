@@ -5,9 +5,10 @@ transformers
 faiss-cpu
 pypdf
 gdown
-PyMuPDF
 langchain
 langchain-embeddings
+numpy
+
 
 
 
