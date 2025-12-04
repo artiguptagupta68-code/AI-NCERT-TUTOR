@@ -140,6 +140,28 @@ for doc in documents:
         })
 
 st.text(f"Total chunks: {len(all_chunks)}")
+def load_documents(folder):
+        texts = []
+        for root, dirs, files in os.walk(folder):
+            for file in files:
+                path = os.path.join(root, file)
+                if file.lower().endswith(".pdf"):
+                    try:
+                        doc = fitz.open(path)
+                        text = ""
+                        for page in doc:
+                            text += page.get_text()
+                        texts.append(text)
+                    except Exception as e:
+                        st.warning(f"Failed to read PDF {path}: {e}")
+                elif file.lower().endswith(".txt"):
+                    try:
+                        with open(path, "r", encoding="utf-8") as f:
+                            texts.append(f.read())
+                    except Exception as e:
+                        st.warning(f"Failed to read TXT {path}: {e}")
+        return texts
+
 texts = load_documents(extract_folder)
 if texts:  # Make sure texts list is not empty
     text_splitter = RecursiveCharacterTextSplitter(
