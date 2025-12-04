@@ -11,128 +11,131 @@ import faiss
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
+# ---------------- Streamlit UI ----------------
 st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
 st.title("📚 AI NCERT Tutor")
 
-# ---------------- FIXED BACKEND ZIP PATH ----------------
+# ---------------- Google Drive Direct Download ----------------
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 DIRECT_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
-
 ZIP_PATH = "/tmp/ncrt.zip"
 
-def download_from_drive():
-    with st.spinner("Downloading NCERT ZIP from Google Drive..."):
+def silent_drive_download():
+    """Download ZIP file quietly without showing anything on UI."""
+    if os.path.exists(ZIP_PATH):
+        return  # already downloaded
+
+    try:
         response = requests.get(DIRECT_URL, stream=True)
-        if response.status_code != 200:
-            st.error("❌ Failed to download ZIP from Google Drive.")
-            st.stop()
+        if response.status_code == 200:
+            with open(ZIP_PATH, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+    except:
+        pass  # silent fail (no UI error)
 
-        with open(ZIP_PATH, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+# ---------------- Load ZIP Automatically ----------------
+silent_drive_download()
 
-st.info("Click the button to load NCERT content.")
+if not os.path.exists(ZIP_PATH):
+    st.error("Failed to load NCERT ZIP from Drive.")
+    st.stop()
 
-if st.button("Load NCERT NCERT ZIP"):
-    download_from_drive()
+# ---------------- Extract ZIP ----------------
+extract_folder = "/tmp/ncert_extracted"
+os.makedirs(extract_folder, exist_ok=True)
 
-    # ---------------- Extract ZIP ----------------
-    extract_folder = "/tmp/ncert_extracted"
-    os.makedirs(extract_folder, exist_ok=True)
-
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+try:
+    with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
         zip_ref.extractall(extract_folder)
+except:
+    st.error("Error extracting NCERT ZIP.")
+    st.stop()
 
-    # Extract nested ZIPs
-    for root, dirs, files in os.walk(extract_folder):
+# Extract nested ZIPs quietly
+for root, dirs, files in os.walk(extract_folder):
+    for file in files:
+        if file.endswith(".zip"):
+            nested = os.path.join(root, file)
+            nested_dest = os.path.join(root, file.replace(".zip", ""))
+            os.makedirs(nested_dest, exist_ok=True)
+            try:
+                with zipfile.ZipFile(nested, 'r') as z:
+                    z.extractall(nested_dest)
+            except:
+                pass
+
+# ---------------- Load PDF/TXT ----------------
+def load_documents(folder):
+    all_text = []
+    for root, dirs, files in os.walk(folder):
         for file in files:
-            if file.endswith(".zip"):
-                nested_path = os.path.join(root, file)
-                nested_extract = os.path.join(root, file.replace(".zip", ""))
-                os.makedirs(nested_extract, exist_ok=True)
-                with zipfile.ZipFile(nested_path, 'r') as z:
-                    z.extractall(nested_extract)
+            path = os.path.join(root, file)
 
-    # ---------------- Load documents ----------------
-    def load_documents(folder):
-        texts = []
-        for root, dirs, files in os.walk(folder):
-            for file in files:
-                path = os.path.join(root, file)
+            if file.endswith(".pdf"):
+                try:
+                    doc = fitz.open(path)
+                    text = "".join([p.get_text() for p in doc])
+                    all_text.append(text)
+                except:
+                    pass
 
-                if file.lower().endswith(".pdf"):
-                    try:
-                        doc = fitz.open(path)
-                        text = ""
-                        for page in doc:
-                            text += page.get_text()
-                        texts.append(text)
-                    except:
-                        pass
+            if file.endswith(".txt"):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        all_text.append(f.read())
+                except:
+                    pass
+    return all_text
 
-                elif file.lower().endswith(".txt"):
-                    try:
-                        with open(path, "r", encoding="utf-8") as f:
-                            texts.append(f.read())
-                    except:
-                        pass
+texts = load_documents(extract_folder)
 
-        return texts
+if len(texts) == 0:
+    st.error("No PDF or TXT found in the ZIP.")
+    st.stop()
 
-    texts = load_documents(extract_folder)
+# ---------------- Text Split ----------------
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+chunks = splitter.split_text(" ".join(texts))
 
-    if len(texts) == 0:
-        st.error("No PDF/TXT files found in backend ZIP!")
-        st.stop()
+# ---------------- Embedding + FAISS ----------------
+embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+embeddings = embed_model.embed_documents(chunks)
 
-    # ---------------- Split text ----------------
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = text_splitter.split_text(" ".join(texts))
+dim = len(embeddings[0])
+index = faiss.IndexFlatL2(dim)
+index.add(np.array(embeddings).astype("float32"))
 
-    # ---------------- Embeddings & FAISS ----------------
-    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    embeddings = embedding_model.embed_documents(chunks)
+# ---------------- QnA ----------------
+query = st.text_input("Ask your question:")
 
-    embed_dim = len(embeddings[0])
-    index = faiss.IndexFlatL2(embed_dim)
-    embedding_matrix = np.array(embeddings).astype("float32")
-    index.add(embedding_matrix)
+if query:
+    q_model = SentenceTransformer("all-MiniLM-L6-v2")
+    q_embed = q_model.encode([query], convert_to_numpy=True)
 
-    st.success("📦 Loaded successfully! You can ask questions now.")
+    D, I = index.search(q_embed.astype("float32"), k=5)
+    retrieved = [chunks[i] for i in I[0]]
 
-    st.session_state["index"] = index
-    st.session_state["chunks"] = chunks
+    context = "\n\n".join(retrieved)
 
-# ---------------- QUESTION ANSWERING ----------------
-if "index" in st.session_state:
-    query = st.text_input("Ask a question:")
+    # LLM
+    llm_name = "facebook/opt-125m"
+    tokenizer = AutoTokenizer.from_pretrained(llm_name)
+    model = AutoModelForCausalLM.from_pretrained(llm_name)
+    model.to("cpu")
 
-    if query:
-        with st.spinner("Searching best answer..."):
-            model = SentenceTransformer("all-MiniLM-L6-v2")
-            q_embed = model.encode([query], convert_to_numpy=True)
-            D, I = st.session_state["index"].search(q_embed.astype("float32"), k=5)
-            retrieved = [st.session_state["chunks"][i] for i in I[0]]
-            context = "\n\n".join(retrieved)
+    prompt = f"Use ONLY this context:\n{context}\n\nQuestion: {query}"
+    inputs = tokenizer(prompt, return_tensors="pt")
 
-        with st.spinner("Generating answer..."):
-            llm_name = "facebook/opt-125m"
-            tokenizer = AutoTokenizer.from_pretrained(llm_name)
-            llm = AutoModelForCausalLM.from_pretrained(llm_name)
-            llm.to("cpu")
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=250,
+            temperature=0.6,
+            do_sample=True
+        )
 
-            inp = f"Answer ONLY from this context:\n{context}\n\nQuestion: {query}"
-            inputs = tokenizer(inp, return_tensors="pt")
+    answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-            with torch.no_grad():
-                output = llm.generate(
-                    **inputs,
-                    max_new_tokens=200,
-                    temperature=0.6,
-                    do_sample=True
-                )
-
-            answer = tokenizer.decode(output[0], skip_special_tokens=True)
-
-        st.subheader("Answer:")
-        st.write(answer)
+    st.subheader("Answer:")
+    st.write(answer)
