@@ -123,7 +123,7 @@ chunks = splitter.split_text(" ".join(texts))
 embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 embeddings = embed_model.embed_documents(chunks)
 all_text = " ".join(texts).strip()
-doc = fitz.open("ncert_extracted/some_file.pdf")
+doc = fitz.open("ncert_extracted")
 texts = []
 for pdf_file in pdf_files:
     doc = fitz.open(pdf_file)
