@@ -15,7 +15,7 @@ st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
 st.title("📚 AI NCERT Tutor")
 
 # ---------------- FIXED BACKEND ZIP PATH ----------------
-BACKEND_ZIP = "/mount/src/ai-ncert-tutor/data/ncert.zip"
+BACKEND_ZIP = "/mount/src/ai-ncert-tutor/data/ncrt.zip"
 
 if not os.path.exists(BACKEND_ZIP):
     st.error("Backend file not found: data/ncert.zip")
