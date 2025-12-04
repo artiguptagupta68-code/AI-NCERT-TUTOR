@@ -12,6 +12,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import shutil
 import gdown
+from pathlib import Path 
+
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 ZIP_PATH = "ncrt.zip"
 EXTRACT_DIR = "ncert_extracted"
