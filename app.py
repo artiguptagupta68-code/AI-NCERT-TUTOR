@@ -16,13 +16,14 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # ----------------------------
 # CONFIG
-# ----------------------------
+FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
+ZIP_PATH = "ncrt.zip"
 EXTRACT_DIR = "ncert_extracted"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 GEN_MODEL_NAME = "google/flan-t5-base"
-TOP_K = 4
+TOP_K = 4 ----------------------------
 
 st.title("📘 NCERT AI Tutor (LangChain RAG)")
 
