@@ -143,55 +143,50 @@ st.text(f"Total chunks: {len(all_chunks)}")
 
 # ----------------------------
 # ---------------- Embeddings & FAISS ----------------
-        embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        embeddings = embedding_model.embed_documents(chunks)
+embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+embeddings = embedding_model.embed_documents(chunks)
 
-        embedding_dim = len(embeddings[0])
-        index = faiss.IndexFlatL2(embedding_dim)
-        embedding_matrix = np.array(embeddings).astype("float32")
-        index.add(embedding_matrix)
-
-        faiss_index = {
-            "index": index,
-            "chunks": chunks
-        }
+embedding_dim = len(embeddings[0])
+index = faiss.IndexFlatL2(embedding_dim)
+embedding_matrix = np.array(embeddings).astype("float32")
+index.add(embedding_matrix)
+faiss_index = {
+    "index": index,
+    "chunks": chunks
+}
         #st.success("FAISS index created!")
 
         # ---------------- User query ----------------
-        query = st.text_input("Ask a question about the content:")
+query = st.text_input("Ask a question about the content:")
 
-        if query:
-            # Retrieve top 5 relevant chunks
-            model = SentenceTransformer("all-MiniLM-L6-v2")
-            query_embedding = model.encode([query], convert_to_numpy=True)
-            D, I = index.search(query_embedding.astype("float32"), k=5)
-            retrieved_chunks = [chunks[i] for i in I[0]]
-            context = "\n\n".join(retrieved_chunks)
+if query:
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    query_embedding = model.encode([query], convert_to_numpy=True)
+     D, I = index.search(query_embedding.astype("float32"), k=5)
+     retrieved_chunks = [chunks[i] for i in I[0]]
+     context = "\n\n".join(retrieved_chunks)
 
             # ---------------- LLM Answer Generation ----------------
             # CPU-friendly model
-            llm_model_name = "facebook/opt-125m"  # CPU-friendly
+llm_model_name = "facebook/opt-125m"  # CPU-friendly
 
-            # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
+            # Load tokenitokenizer = AutoTokenizer.from_pretrained(llm_model_name)
 
             # Load model (no device_map)
-            llm_model = AutoModelForCausalLM.from_pretrained(llm_model_name)
+llm_model = AutoModelForCausalLM.from_pretrained(llm_model_name)
 
             # Force CPU
-            llm_model.to("cpu")
-
-            input_text = f"Answer the question based on the following context:\n{context}\nQuestion: {query}"
-            inputs = tokenizer(input_text, return_tensors="pt")
-            with torch.no_grad():
-                outputs = llm_model.generate(
-                    **inputs,
-                    max_new_tokens=300,
-                    temperature=0.7,
-                    do_sample=True
-                )
-            answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-            st.subheader("Answer:")
-            st.write(answer)
+llm_model.to("cpu")
+input_text = f"Answer the question based on the following context:\n{context}\nQuestion: {query}"
+inputs = tokenizer(input_text, return_tensors="pt")
+with torch.no_grad():
+    outputs = llm_model.generate(
+    **inputs,
+     max_new_tokens=300,
+     temperature=0.7,
+     do_sample=True
+)
+answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
+ st.subheader("Answer:")
+ st.write(answer)
 
