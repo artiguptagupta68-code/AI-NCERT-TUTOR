@@ -114,6 +114,54 @@ def load_documents(folder):
 extract_folder = "/mount/src/ai-ncert-tutor/data/ncert_extracted"
 
 
+
+def split_documents(docs, chunk_size=1000, chunk_overlap=200):
+    """
+    Splits each document's text into chunks and returns a list of chunks.
+    Each chunk is a dict: {'doc_id', 'chunk_id', 'text'}
+    """
+    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    all_chunks = []
+
+    for doc in docs:
+        doc_id = doc['doc_id']
+        text = doc['text']
+        split_texts = splitter.split_text(text)
+        for i, chunk in enumerate(split_texts):
+            all_chunks.append({
+                "doc_id": doc_id,
+                "chunk_id": f"{doc_id}_chunk_{i}",
+                "text": chunk
+            })
+    return all_chunks
+    # Load PDFs into 'docs' first (list of dicts with 'doc_id' and 'text')
+docs = []
+for root, dirs, files in os.walk("ncert_extracted"):
+    for file in files:
+        if file.lower().endswith(".pdf"):
+            path = os.path.join(root, file)
+            try:
+                text = ""
+                import fitz  # PyMuPDF
+                doc = fitz.open(path)
+                for page in doc:
+                    page_text = page.get_text()
+                    if page_text:
+                        text += page_text + "\n"
+                if text.strip():
+                    docs.append({"doc_id": file, "text": text})
+            except Exception as e:
+                st.warning(f"Failed to read PDF {file}: {e}")
+
+st.text(f"Loaded {len(docs)} PDF documents.")
+
+# Now split documents into chunks
+all_chunks = split_documents(docs)
+st.text(f"Total chunks: {len(all_chunks)}")
+
+
+
+
 #STEP 5: Chunk text
 # ----------------------------
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
