@@ -138,8 +138,17 @@ for doc in documents:
             "chunk_id": f"{Path(doc_id).stem}_chunk_{i}",
             "text": chunk
         })
-all_chunks = split_documents(docs)
+all_chunks = split_documents(docs))
 st.text(f"Total chunks: {len(all_chunks)}")
+if len(all_chunks) == 0:
+    st.warning("No readable text found in PDFs. Cannot create chunks.")
+    st.stop()
+
+# Save chunks in session state
+st.session_state['all_chunks'] = all_chunks
+
+# Later when using chunks
+all_chunks = st.session_state.get('all_chunks', [])
 
 #embedding 
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
