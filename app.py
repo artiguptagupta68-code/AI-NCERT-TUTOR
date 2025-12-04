@@ -21,103 +21,78 @@ import zipfile
 import os
 import shutil
 
-# Local ZIP file path (no Google Drive, no download shown)
-BACKEND_ZIP = "/mount/src/ai-ncert-tutor/data/ncrt.zip"
-EXTRACT_DIR = "/mount/src/ai-ncert-tutor/extracted"
+FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
+ZIP_PATH = "ncert.zip"
+EXTRACT_DIR = "ncert_extracted"
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 150
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+GEN_MODEL_NAME = "google/flan-t5-base"
+TOP_K = 4
+# ----------------------------
+# STEP 0: Streamlit UI for info
+# ----------------------------
+st.title("NCERT AI Tutor")
+st.text("Downloading and extracting NCERT ZIP from Google Drive...")
 
-
-def load_local_zip():
-    if not os.path.exists(BACKEND_ZIP):
-        st.error("NCERT ZIP file not found in backend.")
-        return False
-
-    try:
-        # Clean old directory silently
-        if os.path.exists(EXTRACT_DIR):
-            shutil.rmtree(EXTRACT_DIR)
-
-        os.makedirs(EXTRACT_DIR, exist_ok=True)
-
-        # Extract without displaying anything on UI
-        with zipfile.ZipFile(BACKEND_ZIP, 'r') as zip_ref:
-            zip_ref.extractall(EXTRACT_DIR)
-
-        return True
-
-    except Exception as e:
-        st.error("Failed to load NCERT content.")
-        return False
-
-
-st.title("NCERT Tutor")
-
-if st.button("Load NCERT Content"):
-    success = load_local_zip()
-    if success:
-        st.success("NCERT content loaded successfully.")
-    else:
-        st.error("Failed to load NCERT ZIP.")
-
-
-# ---------------- Load ZIP Automatically ----------------
-silent_drive_download()
-
+# ----------------------------
+# STEP 1: Download ZIP
+# ----------------------------
 if not os.path.exists(ZIP_PATH):
-    st.error("Failed to load NCERT ZIP from Drive.")
+    gdown.download(f"https://drive.google.com/uc?id={FILE_ID}", ZIP_PATH, quiet=False)
+st.text("Download completed.")
+
+# ----------------------------
+# STEP 2: Validate ZIP
+# ----------------------------
+if not zipfile.is_zipfile(ZIP_PATH):
+    st.error(f"{ZIP_PATH} is not a valid ZIP file. Check Google Drive link or permissions.")
     st.stop()
+else:
+    st.text("ZIP file is valid!")
 
-# ---------------- Extract ZIP ----------------
-extract_folder = "/tmp/ncert_extracted"
-os.makedirs(extract_folder, exist_ok=True)
+# ----------------------------
+# STEP 3: Extract ZIP
+# ----------------------------
+os.makedirs(EXTRACT_DIR, exist_ok=True)
+with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
+    zip_ref.extractall(EXTRACT_DIR)
+st.text(f"ZIP extracted to: {EXTRACT_DIR}")
 
-try:
-    with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
-        zip_ref.extractall(extract_folder)
-except:
-    st.error("Error extracting NCERT ZIP.")
-    st.stop()
-
-# Extract nested ZIPs quietly
-for root, dirs, files in os.walk(extract_folder):
+# Handle nested ZIPs (like class 11/12 PDFs inside)
+for root, dirs, files in os.walk(EXTRACT_DIR):
     for file in files:
-        if file.endswith(".zip"):
-            nested = os.path.join(root, file)
-            nested_dest = os.path.join(root, file.replace(".zip", ""))
-            os.makedirs(nested_dest, exist_ok=True)
-            try:
-                with zipfile.ZipFile(nested, 'r') as z:
-                    z.extractall(nested_dest)
-            except:
-                pass
+        if file.lower().endswith(".zip"):
+            nested_zip_path = os.path.join(root, file)
+            nested_extract_dir = os.path.join(root, Path(file).stem)
+            os.makedirs(nested_extract_dir, exist_ok=True)
+            with zipfile.ZipFile(nested_zip_path, 'r') as nz:
+                nz.extractall(nested_extract_dir)
 
-# ---------------- Load PDF/TXT ----------------
-def load_documents(folder):
-    all_text = []
-    for root, dirs, files in os.walk(folder):
-        for file in files:
+st.text("All nested ZIPs extracted.")
+
+# ----------------------------
+# STEP 4: Read PDFs
+# ----------------------------
+documents = []
+for root, dirs, files in os.walk(EXTRACT_DIR):
+    for file in files:
+        if file.lower().endswith(".pdf"):
             path = os.path.join(root, file)
+            try:
+                reader = PdfReader(path)
+                text = ""
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                if text.strip():
+                    documents.append({"file": file, "text": text})
+            except Exception as e:
+                st.warning(f"Failed to read PDF: {file}, {e}")
 
-            if file.endswith(".pdf"):
-                try:
-                    doc = fitz.open(path)
-                    text = "".join([p.get_text() for p in doc])
-                    all_text.append(text)
-                except:
-                    pass
+st.text(f"Loaded {len(documents)} PDF documents.")
 
-            if file.endswith(".txt"):
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        all_text.append(f.read())
-                except:
-                    pass
-    return all_text
-
-texts = load_documents(extract_folder)
-
-if len(texts) == 0:
-    st.error("No PDF or TXT found in the ZIP.")
-    st.stop()
 
 # ---------------- Text Split ----------------
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
