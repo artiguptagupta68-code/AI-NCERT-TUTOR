@@ -124,16 +124,18 @@ embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM
 embeddings = embed_model.embed_documents(chunks)
 all_text = " ".join(texts).strip()
 doc = fitz.open("ncert_extracted/some_file.pdf")
-text = ""
-for page in doc:
-    page_text = page.get_text()
-    print(page_text[:500])  # first 500 chars
-if not all_text:
-    st.error("No readable text found in PDFs. Cannot create chunks.")
-else:
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = splitter.split_text(all_text)
-    st.write(f"Total chunks: {len(chunks)}")
+texts = []
+for pdf_file in pdf_files:
+    doc = fitz.open(pdf_file)
+    text = ""
+    for page in doc:
+        page_text = page.get_text()
+        if page_text:
+            text += page_text
+    if text.strip():
+        texts.append(text)
+
+
 
 dim = len(embeddings[0])
 index = faiss.IndexFlatL2(dim)
