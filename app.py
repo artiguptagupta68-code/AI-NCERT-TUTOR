@@ -163,8 +163,8 @@ if query:
     model = SentenceTransformer("all-MiniLM-L6-v2")
     query_embedding = model.encode([query], convert_to_numpy=True)
     D, I = index.search(query_embedding.astype("float32"), k=5)
-     retrieved_chunks = [chunks[i] for i in I[0]]
-     context = "\n\n".join(retrieved_chunks)
+    retrieved_chunks = [chunks[i] for i in I[0]]
+    context = "\n\n".join(retrieved_chunks)
 
             # ---------------- LLM Answer Generation ----------------
             # CPU-friendly model
