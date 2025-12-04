@@ -23,7 +23,7 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 GEN_MODEL_NAME = "google/flan-t5-base"
-TOP_K = 4 ----------------------------
+TOP_K = 4 
 
 st.title("📘 NCERT AI Tutor (LangChain RAG)")
 
