@@ -138,7 +138,7 @@ for doc in documents:
             "chunk_id": f"{Path(doc_id).stem}_chunk_{i}",
             "text": chunk
         })
-all_chunks = split_documents(docs))
+all_chunks = split_documents(docs)
 st.text(f"Total chunks: {len(all_chunks)}")
 if len(all_chunks) == 0:
     st.warning("No readable text found in PDFs. Cannot create chunks.")
