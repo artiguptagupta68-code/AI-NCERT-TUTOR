@@ -141,9 +141,18 @@ for doc in documents:
 
 st.text(f"Total chunks: {len(all_chunks)}")
 
-# ----------------------------
+if texts:  # Make sure texts list is not empty
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
+    chunks = text_splitter.split_text(" ".join(texts))
+    st.success(f"Created {len(chunks)} text chunks")
+else:
+    st.warning("No readable text found in PDFs. Cannot create chunks.")
+    chunks = []
 # ---------------- Embeddings & FAISS ----------------
-chunks = text_splitter.split_text(" ".join(texts))
+
 embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 embeddings = embedding_model.embed_documents(chunks)
 
