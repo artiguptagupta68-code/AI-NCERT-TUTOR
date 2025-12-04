@@ -1,4 +1,4 @@
-
+%%writefile app.py
 import streamlit as st
 import zipfile
 import os
@@ -10,20 +10,22 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 import faiss
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-import gdown  # Google Drive downloader
 
 st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
 st.title("📚 AI NCERT Tutor")
 
-# ---------------- Google Drive Download ----------------
-file_id = st.text_input("Enter Google Drive FILE ID of ZIP:")
-start_btn = st.button("Download & Process")
+# ---------------- FIXED BACKEND ZIP PATH ----------------
+BACKEND_ZIP = "/mount/src/ai-ncert-tutor/data/ncert.zip"
 
-if start_btn and file_id:
+if not os.path.exists(BACKEND_ZIP):
+    st.error("Backend file not found: data/ncert.zip")
+    st.stop()
 
-    with st.spinner("Downloading ZIP from Drive..."):
-        zip_path = "/tmp/ncrt.zip"
-        gdown.download(f"https://drive.google.com/uc?id={file_id}", zip_path, quiet=False)
+start_btn = st.button("Load NCERT Content")
+
+if start_btn:
+    with st.spinner("Loading backend ZIP file..."):
+        zip_path = BACKEND_ZIP
 
     # ---------------- Extract ZIP ----------------
     extract_folder = "/tmp/ncert_extracted"
@@ -71,7 +73,7 @@ if start_btn and file_id:
     texts = load_documents(extract_folder)
 
     if len(texts) == 0:
-        st.error("No PDF/TXT found in the ZIP!")
+        st.error("No PDF/TXT files found in backend ZIP!")
         st.stop()
 
     # ---------------- Split text ----------------
@@ -87,18 +89,17 @@ if start_btn and file_id:
     embedding_matrix = np.array(embeddings).astype("float32")
     index.add(embedding_matrix)
 
-    st.success("📦 Processing complete! You can now ask questions.")
+    st.success("📦 Loaded successfully! You can ask questions now.")
 
-    # Save for queries
     st.session_state["index"] = index
     st.session_state["chunks"] = chunks
 
 # ---------------- QUESTION ANSWERING ----------------
 if "index" in st.session_state:
-    query = st.text_input("Ask a question about the NCERT content:")
+    query = st.text_input("Ask a question:")
 
     if query:
-        with st.spinner("Searching..."):
+        with st.spinner("Searching best answer..."):
             model = SentenceTransformer("all-MiniLM-L6-v2")
             q_embed = model.encode([query], convert_to_numpy=True)
             D, I = st.session_state["index"].search(q_embed.astype("float32"), k=5)
@@ -111,7 +112,7 @@ if "index" in st.session_state:
             llm = AutoModelForCausalLM.from_pretrained(llm_name)
             llm.to("cpu")
 
-            inp = f"Answer the question based ONLY on this context:\n{context}\n\nQuestion: {query}"
+            inp = f"Answer ONLY from this context:\n{context}\n\nQuestion: {query}"
             inputs = tokenizer(inp, return_tensors="pt")
 
             with torch.no_grad():
