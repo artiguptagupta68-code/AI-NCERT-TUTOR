@@ -89,6 +89,33 @@ for root, dirs, files in os.walk(EXTRACT_DIR):
 st.text(f"Loaded {len(documents)} PDF documents.")
 
 
+def load_documents(folder):
+    texts = []
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            path = os.path.join(root, file)
+            if file.lower().endswith(".pdf"):
+                try:
+                    doc = fitz.open(path)
+                    text = ""
+                    for page in doc:
+                        text += page.get_text()
+                    texts.append(text)
+                except Exception as e:
+                    st.warning(f"Failed to read PDF {path}: {e}")
+            elif file.lower().endswith(".txt"):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        texts.append(f.read())
+                except Exception as e:
+                    st.warning(f"Failed to read TXT {path}: {e}")
+    return texts
+
+# Now you can safely call:
+
+texts = load_documents(extract_folder)
+
+
 # ---------------- Text Split ----------------
 texts = load_documents(extract_folder)
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
