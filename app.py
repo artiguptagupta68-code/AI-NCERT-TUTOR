@@ -140,73 +140,88 @@ for doc in documents:
         })
 
 st.text(f"Total chunks: {len(all_chunks)}")
-# STEP 6: Create embeddings and FAISS index
-# ----------------------------
-embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-texts = [c["text"] for c in all_chunks]
-embeddings = embed_model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
-d = embeddings.shape[1]
-index = faiss.IndexFlatL2(d)
-index.add(embeddings)
-metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
-st.text("FAISS index built.")
 
-# ----------------------------
-# STEP 7: Load generator
-# ----------------------------
-device = 0 if torch.cuda.is_available() else -1
-tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
-gen_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
-if device == 0:
-    gen_model = gen_model.to("cuda")
-generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenizer, device=device)
+#embedding 
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+GEN_MODEL_NAME = "google/flan-t5-base"
+TOP_K = 5  # number of chunks to retrieve
 
-# ----------------------------
-# STEP 8: RAG functions
-# ----------------------------
-def retrieve(query, top_k=TOP_K):
-    q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
-    D, I = index.search(q_emb, top_k)
-    return [metadata[idx] for idx in I[0]]
+if 'all_chunks' not in st.session_state:
+    st.warning("No chunks loaded! Please load NCERT content first.")
+else:
+    all_chunks = st.session_state['all_chunks']
 
-def build_prompt(retrieved_chunks, question, max_context_chars=3000):
-    ctx_parts = []
-    total = 0
-    for r in retrieved_chunks:
-        t = r["text"].strip()
-        if not t:
-            continue
-        remaining = max_context_chars - total
-        if remaining <= 0:
-            break
-        if len(t) > remaining:
-            t = t[:remaining]
-        ctx_parts.append(f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n")
-        total += len(t)
-    context = "\n---\n".join(ctx_parts)
-    prompt = (
-        "You are an AI tutor specialized in NCERT content. Use the provided context excerpts to answer the question accurately.\n\n"
-        f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer concisely and clearly:"
-    )
-    return prompt
+    # Create embeddings only once
+    @st.cache_resource(show_spinner=True)
+    def build_index(chunks):
+        st.text("Creating embeddings. This may take a few minutes...")
+        embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        texts = [c["text"] for c in chunks]
+        embeddings = embed_model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
+        dim = embeddings.shape[1]
+        index = faiss.IndexFlatL2(dim)
+        index.add(embeddings)
+        metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in chunks]
+        st.text(f"FAISS index built with {len(chunks)} chunks.")
+        return embed_model, index, metadata
 
-def generate_answer(query):
-    retrieved = retrieve(query)
-    if not retrieved:
-        return {"answer": "No relevant documents found.", "sources": []}
-    prompt = build_prompt(retrieved, query)
-    out = generator(prompt, max_length=256, do_sample=False)[0]["generated_text"]
-    sources = [{"doc_id": r["doc_id"], "chunk_id": r["chunk_id"]} for r in retrieved]
-    return {"answer": out.strip(), "sources": sources}
+    embed_model, index, metadata = build_index(all_chunks)
 
-# ----------------------------
-# STEP 9: Streamlit Query Interface
-# ----------------------------
-query = st.text_input("Ask a question about NCERT content:")
-if query:
-    with st.spinner("Generating answer..."):
-        result = generate_answer(query)
-        st.write("**Answer:**", result["answer"])
-        st.write("**Sources:**")
-        for src in result["sources"]:
-            st.write(f"{src['doc_id']} / {src['chunk_id']}")
+    # ---------------------------- STEP 7: Load generator ----------------------------
+    @st.cache_resource(show_spinner=True)
+    def load_generator():
+        device = 0 if torch.cuda.is_available() else -1
+        tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
+        gen_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
+        if device == 0:
+            gen_model = gen_model.to("cuda")
+        generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenizer, device=device)
+        return generator
+
+    generator = load_generator()
+
+    # ---------------------------- STEP 8: RAG FUNCTIONS ----------------------------
+    def retrieve(query, top_k=TOP_K):
+        q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
+        D, I = index.search(q_emb, top_k)
+        return [metadata[idx] for idx in I[0]]
+
+    def build_prompt(retrieved_chunks, question, max_context_chars=3000):
+        ctx_parts = []
+        total = 0
+        for r in retrieved_chunks:
+            t = r["text"].strip()
+            if not t:
+                continue
+            remaining = max_context_chars - total
+            if remaining <= 0:
+                break
+            if len(t) > remaining:
+                t = t[:remaining]
+            ctx_parts.append(f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n")
+            total += len(t)
+        context = "\n---\n".join(ctx_parts)
+        prompt = (
+            "You are an AI tutor specialized in NCERT content. Use the provided context excerpts to answer the question accurately.\n\n"
+            f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer concisely and clearly:"
+        )
+        return prompt
+
+    def generate_answer(query):
+        retrieved = retrieve(query)
+        if not retrieved:
+            return {"answer": "No relevant documents found.", "sources": []}
+        prompt = build_prompt(retrieved, query)
+        out = generator(prompt, max_length=256, do_sample=False)[0]["generated_text"]
+        sources = [{"doc_id": r["doc_id"], "chunk_id": r["chunk_id"]} for r in retrieved]
+        return {"answer": out.strip(), "sources": sources}
+
+    # ---------------------------- STEP 9: STREAMLIT UI ----------------------------
+    query = st.text_input("Ask a question about NCERT content:")
+    if query:
+        with st.spinner("Generating answer..."):
+            result = generate_answer(query)
+            st.write("**Answer:**", result["answer"])
+            st.write("**Sources:**")
+            for src in result["sources"]:
+                st.write(f"{src['doc_id']} / {src['chunk_id']}")
