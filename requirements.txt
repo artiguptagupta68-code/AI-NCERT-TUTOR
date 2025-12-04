@@ -8,6 +8,7 @@ faiss-cpu
 torch
 transformers
  gdown
+pypdf
 
 
 
