@@ -8,13 +8,13 @@ from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import faiss
-from transformers import AutoTokenizer, AutoModelForCausalLM
+
 import torch
 import shutil
 import gdown
 from pathlib import Path 
 from pypdf import PdfReader
-
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 ZIP_PATH = "ncrt.zip"
