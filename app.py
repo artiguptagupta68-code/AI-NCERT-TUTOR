@@ -15,17 +15,26 @@ st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
 st.title("📚 AI NCERT Tutor")
 
 # ---------------- FIXED BACKEND ZIP PATH ----------------
-BACKEND_ZIP = "/mount/src/ai-ncert-tutor/data/ncrt.zip"
+FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
+DIRECT_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
 
-if not os.path.exists(BACKEND_ZIP):
-    st.error("Backend file not found: data/ncert.zip")
-    st.stop()
+ZIP_PATH = "/tmp/ncrt.zip"
 
-start_btn = st.button("Load NCERT Content")
+def download_from_drive():
+    with st.spinner("Downloading NCERT ZIP from Google Drive..."):
+        response = requests.get(DIRECT_URL, stream=True)
+        if response.status_code != 200:
+            st.error("❌ Failed to download ZIP from Google Drive.")
+            st.stop()
 
-if start_btn:
-    with st.spinner("Loading backend ZIP file..."):
-        zip_path = BACKEND_ZIP
+        with open(ZIP_PATH, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+st.info("Click the button to load NCERT content.")
+
+if st.button("Load NCERT NCERT ZIP"):
+    download_from_drive()
 
     # ---------------- Extract ZIP ----------------
     extract_folder = "/tmp/ncert_extracted"
