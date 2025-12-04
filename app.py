@@ -13,6 +13,8 @@ import torch
 import shutil
 import gdown
 from pathlib import Path 
+from pypdf import PdfReader
+
 
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
 ZIP_PATH = "ncrt.zip"
