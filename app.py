@@ -119,76 +119,52 @@ texts = load_documents(extract_folder)
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 chunks = splitter.split_text(" ".join(texts))
 
-# ---------------- Embedding + FAISS ----------------
-embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-embeddings = embed_model.embed_documents(chunks)
-all_text = " ".join(texts).strip()
-extract_folder = "ncert_extracted"
+embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+embeddings = embedding_model.embed_documents(chunks)
 
-pdf_files = [os.path.join(root, f)
-             for root, dirs, files in os.walk(extract_folder)
-             for f in files if f.lower().endswith(".pdf")]
-
-texts = []
-
-for pdf_path in pdf_files:
-    try:
-        doc = fitz.open(pdf_path)
-        text = ""
-        for page in doc:
-            page_text = page.get_text()
-            if page_text:
-                text += page_text + "\n"
-        if text.strip():
-            texts.append(text)
-    except Exception as e:
-        print(f"Failed to read {pdf_path}: {e}")
-
-print(f"Loaded {len(texts)} PDFs with readable text")
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-if texts:
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = splitter.split_text(" ".join(texts))
-    print(f"Created {len(chunks)} chunks")
-else:
-    print("No readable text found in PDFs. Cannot create chunks.")
-
+if not embeddings:
+    st.warning("No embeddings created. Cannot continue.")
+    st.stop()
 
 dim = len(embeddings[0])
 index = faiss.IndexFlatL2(dim)
 index.add(np.array(embeddings).astype("float32"))
 
-# ---------------- QnA ----------------
-query = st.text_input("Ask your question:")
+# ---------------- User Query ----------------
+query = st.text_input("Ask your question about NCERT content:")
 
 if query:
     q_model = SentenceTransformer("all-MiniLM-L6-v2")
-    q_embed = q_model.encode([query], convert_to_numpy=True)
+    q_embed = q_model.encode([query], convert_to_numpy=True).astype("float32")
 
-    D, I = index.search(q_embed.astype("float32"), k=5)
-    retrieved = [chunks[i] for i in I[0]]
+    # Ensure k <= number of chunks
+    k = min(5, len(chunks))
+    D, I = index.search(q_embed, k=k)
 
-    context = "\n\n".join(retrieved)
+    # Filter valid indices
+    retrieved = [chunks[i] for i in I[0] if i < len(chunks)]
+    if not retrieved:
+        st.warning("No relevant chunks found for your query.")
+    else:
+        context = "\n\n".join(retrieved)
 
-    # LLM
-    llm_name = "facebook/opt-125m"
-    tokenizer = AutoTokenizer.from_pretrained(llm_name)
-    model = AutoModelForCausalLM.from_pretrained(llm_name)
-    model.to("cpu")
+        # ---------------- LLM ----------------
+        llm_name = "facebook/opt-125m"
+        tokenizer = AutoTokenizer.from_pretrained(llm_name)
+        model = AutoModelForCausalLM.from_pretrained(llm_name)
+        model.to("cpu")
 
-    prompt = f"Use ONLY this context:\n{context}\n\nQuestion: {query}"
-    inputs = tokenizer(prompt, return_tensors="pt")
+        prompt = f"Use ONLY this context:\n{context}\n\nQuestion: {query}"
+        inputs = tokenizer(prompt, return_tensors="pt")
 
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=250,
-            temperature=0.6,
-            do_sample=True
-        )
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=250,
+                temperature=0.6,
+                do_sample=True
+            )
 
-    answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-    st.subheader("Answer:")
-    st.write(answer)
+        answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        st.subheader("Answer:")
+        st.write(answer)
