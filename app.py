@@ -1,7 +1,8 @@
 import os
 import zipfile
 import streamlit as st
-import fitz  # PyMuPDF
+from pathlib import Path
+from pypdf import PdfReader
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -43,7 +44,7 @@ if not os.path.exists(EXTRACT_FOLDER):
 
 st.success("NCERT ZIP extracted successfully!")
 
-# ---------------- Load documents ----------------
+# ---------------- Load PDF/TXT documents ----------------
 def load_documents(folder):
     texts = []
     for root, dirs, files in os.walk(folder):
@@ -51,11 +52,14 @@ def load_documents(folder):
             path = os.path.join(root, file)
             if file.lower().endswith(".pdf"):
                 try:
-                    doc = fitz.open(path)
+                    reader = PdfReader(path)
                     text = ""
-                    for page in doc:
-                        text += page.get_text()
-                    texts.append(text)
+                    for page in reader.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + "\n"
+                    if text.strip():
+                        texts.append(text)
                 except Exception as e:
                     st.warning(f"Failed to read PDF {path}: {e}")
             elif file.lower().endswith(".txt"):
