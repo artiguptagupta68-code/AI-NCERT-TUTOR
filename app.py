@@ -90,6 +90,7 @@ st.text(f"Loaded {len(documents)} PDF documents.")
 
 
 # ---------------- Text Split ----------------
+texts = load_documents(extract_folder)
 splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 chunks = splitter.split_text(" ".join(texts))
 
