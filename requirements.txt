@@ -7,5 +7,4 @@ pypdf
 gdown
 langchain
 langchain-embeddings
-
-
+numpy
