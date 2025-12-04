@@ -16,23 +16,48 @@ st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
 st.title("📚 AI NCERT Tutor")
 
 # ---------------- Google Drive Direct Download ----------------
-FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
-DIRECT_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
-ZIP_PATH = "/tmp/ncert.zip"
+import streamlit as st
+import zipfile
+import os
+import shutil
 
-def silent_drive_download():
-    """Download ZIP file quietly without showing anything on UI."""
-    if os.path.exists(ZIP_PATH):
-        return  # already downloaded
+# Local ZIP file path (no Google Drive, no download shown)
+BACKEND_ZIP = "/mount/src/ai-ncert-tutor/data/ncrt.zip"
+EXTRACT_DIR = "/mount/src/ai-ncert-tutor/extracted"
+
+
+def load_local_zip():
+    if not os.path.exists(BACKEND_ZIP):
+        st.error("NCERT ZIP file not found in backend.")
+        return False
 
     try:
-        response = requests.get(DIRECT_URL, stream=True)
-        if response.status_code == 200:
-            with open(ZIP_PATH, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-    except:
-        pass  # silent fail (no UI error)
+        # Clean old directory silently
+        if os.path.exists(EXTRACT_DIR):
+            shutil.rmtree(EXTRACT_DIR)
+
+        os.makedirs(EXTRACT_DIR, exist_ok=True)
+
+        # Extract without displaying anything on UI
+        with zipfile.ZipFile(BACKEND_ZIP, 'r') as zip_ref:
+            zip_ref.extractall(EXTRACT_DIR)
+
+        return True
+
+    except Exception as e:
+        st.error("Failed to load NCERT content.")
+        return False
+
+
+st.title("NCERT Tutor")
+
+if st.button("Load NCERT Content"):
+    success = load_local_zip()
+    if success:
+        st.success("NCERT content loaded successfully.")
+    else:
+        st.error("Failed to load NCERT ZIP.")
+
 
 # ---------------- Load ZIP Automatically ----------------
 silent_drive_download()
