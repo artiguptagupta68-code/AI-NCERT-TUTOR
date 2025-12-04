@@ -17,7 +17,7 @@ st.title("📚 AI NCERT Tutor")
 
 # ---------------- Google Drive CONFIG ----------------
 FILE_ID = "YOUR_FILE_ID_HERE"  # Replace with your Google Drive file ID
-ZIP_PATH = "/tmp/ncert.zip"
+ZIP_PATH = "/tmp/ncrt.zip"
 EXTRACT_FOLDER = "/tmp/ncert_extracted"
 
 # ---------------- Download ZIP from Drive ----------------
