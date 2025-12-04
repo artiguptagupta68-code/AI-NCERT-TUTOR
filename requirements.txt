@@ -18,6 +18,13 @@ tiktoken
 streamlit
 
 langchain-core
+streamlit
+sentence-transformers
+
+PyMuPDF
+
+langchain-embeddings
+
 
 
 
