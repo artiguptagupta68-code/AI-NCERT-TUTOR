@@ -8,6 +8,7 @@ from sentence_transformers import SentenceTransformer
 import faiss
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 import torch
+import gdown
 
 # ----------------------------
 # CONFIG
@@ -19,11 +20,21 @@ CHUNK_OVERLAP = 150
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 GEN_MODEL_NAME = "google/flan-t5-base"
 TOP_K = 4
+FILE_ID = "YOUR_GOOGLE_DRIVE_FILE_ID"  # Replace with your file ID
 
 st.title("📘 NCERT AI Tutor (RAG)")
 
 # ----------------------------
-# STEP 1: Extract ZIP if not done already
+# STEP 1: Download ZIP if missing
+# ----------------------------
+if not os.path.exists(ZIP_PATH):
+    st.info("Downloading NCERT ZIP from Google Drive...")
+    url = f"https://drive.google.com/uc?id={FILE_ID}"
+    gdown.download(url, ZIP_PATH, quiet=False)
+    st.success("Download completed!")
+
+# ----------------------------
+# STEP 2: Extract ZIP if missing
 # ----------------------------
 if not os.path.exists(EXTRACT_DIR):
     if os.path.exists(ZIP_PATH):
@@ -35,7 +46,7 @@ if not os.path.exists(EXTRACT_DIR):
         st.stop()
 
 # ----------------------------
-# STEP 2: Read PDFs
+# STEP 3: Read PDFs
 # ----------------------------
 documents = []
 for root, dirs, files in os.walk(EXTRACT_DIR):
@@ -61,7 +72,7 @@ if len(documents) == 0:
 st.text(f"Loaded {len(documents)} PDF documents.")
 
 # ----------------------------
-# STEP 3: Chunk text
+# STEP 4: Chunk text
 # ----------------------------
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     chunks = []
@@ -84,7 +95,7 @@ for doc in documents:
 st.text(f"Total chunks: {len(all_chunks)}")
 
 # ----------------------------
-# STEP 4: Create embeddings and FAISS index
+# STEP 5: Create embeddings and FAISS index
 # ----------------------------
 embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
 embeddings = embed_model.encode(all_chunks, convert_to_numpy=True, show_progress_bar=True).astype("float32")
@@ -94,7 +105,7 @@ index.add(embeddings)
 st.text("FAISS index built.")
 
 # ----------------------------
-# STEP 5: Load generator model
+# STEP 6: Load generator model
 # ----------------------------
 device = 0 if torch.cuda.is_available() else -1
 tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
@@ -104,7 +115,7 @@ if device == 0:
 generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenizer, device=device)
 
 # ----------------------------
-# STEP 6: RAG functions
+# STEP 7: RAG functions
 # ----------------------------
 def retrieve(query, top_k=TOP_K):
     q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
@@ -141,7 +152,7 @@ def generate_answer(query):
     return out.strip()
 
 # ----------------------------
-# STEP 7: Streamlit UI
+# STEP 8: Streamlit UI
 # ----------------------------
 query = st.text_input("Ask a question about NCERT content:")
 if query:
