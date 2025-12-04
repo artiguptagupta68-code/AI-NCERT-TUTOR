@@ -142,73 +142,56 @@ for doc in documents:
 st.text(f"Total chunks: {len(all_chunks)}")
 
 # ----------------------------
-# STEP 6: Create embeddings and FAISS index
-# ----------------------------
-embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-texts = [c["text"] for c in all_chunks]
-embeddings = embed_model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
-d = embeddings.shape[1]
-index = faiss.IndexFlatL2(d)
-index.add(embeddings)
-metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
-st.text("FAISS index built.")
+# ---------------- Embeddings & FAISS ----------------
+        embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        embeddings = embedding_model.embed_documents(chunks)
 
-# ----------------------------
-# STEP 7: Load generator
-# ----------------------------
-device = 0 if torch.cuda.is_available() else -1
-tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
-gen_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
-if device == 0:
-    gen_model = gen_model.to("cuda")
-generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenizer, device=device)
+        embedding_dim = len(embeddings[0])
+        index = faiss.IndexFlatL2(embedding_dim)
+        embedding_matrix = np.array(embeddings).astype("float32")
+        index.add(embedding_matrix)
 
-# ----------------------------
-# STEP 8: RAG functions
-# ----------------------------
-def retrieve(query, top_k=TOP_K):
-    q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
-    D, I = index.search(q_emb, top_k)
-    return [metadata[idx] for idx in I[0]]
+        faiss_index = {
+            "index": index,
+            "chunks": chunks
+        }
+        #st.success("FAISS index created!")
 
-def build_prompt(retrieved_chunks, question, max_context_chars=3000):
-    ctx_parts = []
-    total = 0
-    for r in retrieved_chunks:
-        t = r["text"].strip()
-        if not t:
-            continue
-        remaining = max_context_chars - total
-        if remaining <= 0:
-            break
-        if len(t) > remaining:
-            t = t[:remaining]
-        ctx_parts.append(f"Source ({r['doc_id']} / {r['chunk_id']}):\n{t}\n")
-        total += len(t)
-    context = "\n---\n".join(ctx_parts)
-    prompt = (
-        "You are an AI tutor specialized in NCERT content. Use the provided context excerpts to answer the question accurately.\n\n"
-        f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer concisely and clearly:"
-    )
-    return prompt
+        # ---------------- User query ----------------
+        query = st.text_input("Ask a question about the content:")
 
-def generate_answer(query):
-    retrieved = retrieve(query)
-    if not retrieved:
-        return {"answer": "No relevant documents found.", "sources": []}
-    prompt = build_prompt(retrieved, query)
-    out = generator(prompt, max_length=256, do_sample=False)[0]["generated_text"]
-    sources = [{"doc_id": r["doc_id"], "chunk_id": r["chunk_id"]} for r in retrieved]
-    return {"answer": out.strip(), "sources": sources}
+        if query:
+            # Retrieve top 5 relevant chunks
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            query_embedding = model.encode([query], convert_to_numpy=True)
+            D, I = index.search(query_embedding.astype("float32"), k=5)
+            retrieved_chunks = [chunks[i] for i in I[0]]
+            context = "\n\n".join(retrieved_chunks)
 
-# ----------------------------
-# STEP 9: Streamlit Query Interface
-# ----------------------------
-query = st.text_input("Ask a question about NCERT content:")
-if query:
-    with st.spinner("Generating answer..."):
-        result = generate_answer(query)
-        st.write("**Answer:**", result["answer"])
-        st.write("**Sources:**")
-        for src in result["sources"]:
-            st.write(f"{src['doc_id']} / {src['chunk_id']}")
+            # ---------------- LLM Answer Generation ----------------
+            # CPU-friendly model
+            llm_model_name = "facebook/opt-125m"  # CPU-friendly
+
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
+
+            # Load model (no device_map)
+            llm_model = AutoModelForCausalLM.from_pretrained(llm_model_name)
+
+            # Force CPU
+            llm_model.to("cpu")
+
+            input_text = f"Answer the question based on the following context:\n{context}\nQuestion: {query}"
+            inputs = tokenizer(input_text, return_tensors="pt")
+            with torch.no_grad():
+                outputs = llm_model.generate(
+                    **inputs,
+                    max_new_tokens=300,
+                    temperature=0.7,
+                    do_sample=True
+                )
+            answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            st.subheader("Answer:")
+            st.write(answer)
+
