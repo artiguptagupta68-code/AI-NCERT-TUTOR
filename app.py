@@ -187,6 +187,6 @@ with torch.no_grad():
      do_sample=True
 )
 answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
- st.subheader("Answer:")
- st.write(answer)
+st.subheader("Answer:")
+st.write(answer)
 
