@@ -145,6 +145,15 @@ for pdf_path in pdf_files:
         print(f"Failed to read {pdf_path}: {e}")
 
 print(f"Loaded {len(texts)} PDFs with readable text")
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+if texts:
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    chunks = splitter.split_text(" ".join(texts))
+    print(f"Created {len(chunks)} chunks")
+else:
+    print("No readable text found in PDFs. Cannot create chunks.")
+
 
 dim = len(embeddings[0])
 index = faiss.IndexFlatL2(dim)
