@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from langchain.llms import HuggingFacePipeline
