@@ -10,19 +10,10 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 import faiss
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
-
-# ---------------- Streamlit UI ----------------
-st.set_page_config(page_title="📚 AI NCERT Tutor", layout="wide")
-st.title("📚 AI NCERT Tutor")
-
-# ---------------- Google Drive Direct Download ----------------
-import streamlit as st
-import zipfile
-import os
 import shutil
 
 FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
-ZIP_PATH = "ncert.zip"
+ZIP_PATH = "ncrt.zip"
 EXTRACT_DIR = "ncert_extracted"
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
