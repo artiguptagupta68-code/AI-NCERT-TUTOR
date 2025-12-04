@@ -90,4 +90,28 @@ query = st.text_input("Ask a question about the content:")
 
 if query:
     # Retrieve top 5 relevant chunks
-    model = SentenceTransformer("all-MiniLM-L
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    query_embedding = model.encode([query], convert_to_numpy=True)
+    D, I = index.search(query_embedding.astype("float32"), k=5)
+    retrieved_chunks = [chunks[i] for i in I[0]]
+    context = "\n\n".join(retrieved_chunks)
+
+    # ---------------- LLM Answer Generation ----------------
+    llm_model_name = "facebook/opt-125m"  # CPU-friendly
+    tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
+    llm_model = AutoModelForCausalLM.from_pretrained(llm_model_name)
+    llm_model.to("cpu")
+
+    input_text = f"Answer the question based on the following context:\n{context}\nQuestion: {query}"
+    inputs = tokenizer(input_text, return_tensors="pt")
+    with torch.no_grad():
+        outputs = llm_model.generate(
+            **inputs,
+            max_new_tokens=300,
+            temperature=0.7,
+            do_sample=True
+        )
+    answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    st.subheader("Answer:")
+    st.write(answer)
