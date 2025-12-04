@@ -140,7 +140,7 @@ for doc in documents:
         })
 
 st.text(f"Total chunks: {len(all_chunks)}")
-
+texts = load_documents(extract_folder)
 if texts:  # Make sure texts list is not empty
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
