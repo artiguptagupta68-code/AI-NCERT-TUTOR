@@ -111,9 +111,7 @@ def load_documents(folder):
                     st.warning(f"Failed to read TXT {path}: {e}")
     return texts
 
-# Now you can safely call:
-
-texts = load_documents(extract_folder)
+extract_folder = "/mount/src/ai-ncert-tutor/data/ncert_extracted"
 
 
 # ---------------- Text Split ----------------
