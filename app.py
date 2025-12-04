@@ -122,6 +122,13 @@ chunks = splitter.split_text(" ".join(texts))
 # ---------------- Embedding + FAISS ----------------
 embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 embeddings = embed_model.embed_documents(chunks)
+all_text = " ".join(texts).strip()
+if not all_text:
+    st.error("No readable text found in PDFs. Cannot create chunks.")
+else:
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    chunks = splitter.split_text(all_text)
+    st.write(f"Total chunks: {len(chunks)}")
 
 dim = len(embeddings[0])
 index = faiss.IndexFlatL2(dim)
