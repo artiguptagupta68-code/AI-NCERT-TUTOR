@@ -3,7 +3,7 @@ import streamlit as st
 
 
 from langchain_community.vectorstores import FAISS
-from langchain.chains.retrieval_qa.base import RetrievalQA
+from langchain_community.chains import RetrievalQA
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 from langchain.llms import HuggingFacePipeline
 from langchain_text_splitters import RecursiveCharacterTextSplitter
