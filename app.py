@@ -114,7 +114,7 @@ def load_documents(folder):
 extract_folder = "/mount/src/ai-ncert-tutor/data/ncert_extracted"
 
 
-STEP 5: Chunk text
+#STEP 5: Chunk text
 # ----------------------------
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     chunks = []
