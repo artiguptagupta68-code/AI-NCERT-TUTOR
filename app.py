@@ -123,6 +123,11 @@ chunks = splitter.split_text(" ".join(texts))
 embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 embeddings = embed_model.embed_documents(chunks)
 all_text = " ".join(texts).strip()
+doc = fitz.open("ncert_extracted/some_file.pdf")
+text = ""
+for page in doc:
+    page_text = page.get_text()
+    print(page_text[:500])  # first 500 chars
 if not all_text:
     st.error("No readable text found in PDFs. Cannot create chunks.")
 else:
