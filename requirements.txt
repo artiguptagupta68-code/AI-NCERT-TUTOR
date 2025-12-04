@@ -8,15 +8,16 @@ pypdf
 gdown
 streamlit
 langchain
-faiss-cpu
-PyPDF2
+
+
 
 langchain-community
-faiss-cpu
-sentence-transformers
+
+
 tiktoken
 streamlit
 
+langchain-core
 
 
 
