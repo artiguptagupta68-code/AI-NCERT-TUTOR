@@ -1,19 +1,16 @@
 import os
 import streamlit as st
-
-
-from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
+from pathlib import Path
+from pypdf import PdfReader
+import numpy as np
+from sentence_transformers import SentenceTransformer
+import faiss
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
-from langchain.llms import HuggingFacePipeline
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyMuPDFLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
+import torch
 
-# ---------------------------------------------------------
+# ----------------------------
 # CONFIG
-# ---------------------------------------------------------
-FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
+# ----------------------------
 ZIP_PATH = "ncrt.zip"
 EXTRACT_DIR = "ncert_extracted"
 CHUNK_SIZE = 800
@@ -22,95 +19,115 @@ EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 GEN_MODEL_NAME = "google/flan-t5-base"
 TOP_K = 4
 
-
 st.title("📘 NCERT AI Tutor (RAG)")
 
-# ---------------------------------------------------------
-# LOAD PDF DOCUMENTS
-# ---------------------------------------------------------
-@st.cache_resource
-def load_docs():
-    docs = []
-    if not os.path.exists(PDF_FOLDER):
-        st.error("❌ NCERT folder not found!")
-        return docs
+# ----------------------------
+# STEP 1: Read PDFs
+# ----------------------------
+documents = []
+for root, dirs, files in os.walk(EXTRACT_DIR):
+    for file in files:
+        if file.lower().endswith(".pdf"):
+            path = os.path.join(root, file)
+            try:
+                reader = PdfReader(path)
+                text = ""
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                if text.strip():
+                    documents.append({"file": file, "text": text})
+            except Exception as e:
+                st.warning(f"Failed to read PDF: {file}, {e}")
 
-    for root, dirs, files in os.walk(PDF_FOLDER):
-        for f in files:
-            if f.endswith(".pdf"):
-                loader = PyPDFLoader(os.path.join(root, f))
-                docs.extend(loader.load())
-    return docs
+st.text(f"Loaded {len(documents)} PDF documents.")
 
-docs = load_docs()
-st.success(f"Loaded {len(docs)} PDF pages")
+# ----------------------------
+# STEP 2: Chunk text
+# ----------------------------
+def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end == len(text):
+            break
+        start = end - overlap
+    return chunks
 
-# ---------------------------------------------------------
-# SPLIT INTO CHUNKS
-# ---------------------------------------------------------
-@st.cache_resource
-def split_docs(docs):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=120)
-    return splitter.split_documents(docs)
+all_chunks = []
+for doc in documents:
+    for chunk in chunk_text(doc["text"]):
+        all_chunks.append(chunk)
 
-chunks = split_docs(docs)
-st.success(f"Created {len(chunks)} chunks")
+st.text(f"Total chunks: {len(all_chunks)}")
 
-# ---------------------------------------------------------
-# BUILD FAISS INDEX
-# ---------------------------------------------------------
-@st.cache_resource
-def create_faiss(chunks):
-    embedder = HuggingFaceEmbeddings(model_name=EMB_MODEL)
-    vectordb = FAISS.from_documents(chunks, embedder)
-    return vectordb
+# ----------------------------
+# STEP 3: Create embeddings and FAISS index
+# ----------------------------
+embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+embeddings = embed_model.encode(all_chunks, convert_to_numpy=True, show_progress_bar=True).astype("float32")
+d = embeddings.shape[1]
+index = faiss.IndexFlatL2(d)
+index.add(embeddings)
+st.text("FAISS index built.")
 
-vectordb = create_faiss(chunks)
-retriever = vectordb.as_retriever()
+# ----------------------------
+# STEP 4: Load generator
+# ----------------------------
+device = 0 if torch.cuda.is_available() else -1
+tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
+gen_model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
+if device == 0:
+    gen_model = gen_model.to("cuda")
+generator = pipeline("text2text-generation", model=gen_model, tokenizer=tokenizer, device=device)
 
-st.success("FAISS index ready")
+# ----------------------------
+# STEP 5: RAG functions
+# ----------------------------
+def retrieve(query, top_k=TOP_K):
+    q_emb = embed_model.encode([query], convert_to_numpy=True).astype("float32")
+    D, I = index.search(q_emb, top_k)
+    return [all_chunks[i] for i in I[0]]
 
-# ---------------------------------------------------------
-# LOAD GENERATOR MODEL
-# ---------------------------------------------------------
-@st.cache_resource
-def load_llm():
-    tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL)
-    model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL)
-
-    pipe = pipeline(
-        "text2text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        max_length=200
+def build_prompt(retrieved_chunks, question, max_context_chars=3000):
+    ctx_parts = []
+    total = 0
+    for r in retrieved_chunks:
+        t = r.strip()
+        if not t:
+            continue
+        remaining = max_context_chars - total
+        if remaining <= 0:
+            break
+        if len(t) > remaining:
+            t = t[:remaining]
+        ctx_parts.append(t)
+        total += len(t)
+    context = "\n---\n".join(ctx_parts)
+    prompt = (
+        "You are an AI tutor specialized in NCERT content. Use the provided context excerpts to answer the question accurately.\n\n"
+        f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer concisely and clearly:"
     )
-    return HuggingFacePipeline(pipeline=pipe)
+    return prompt
 
-llm = load_llm()
-st.success("Generator model loaded")
+def generate_answer(query):
+    retrieved = retrieve(query)
+    if not retrieved:
+        return "No relevant documents found."
+    prompt = build_prompt(retrieved, query)
+    out = generator(prompt, max_length=256, do_sample=False)[0]["generated_text"]
+    return out.strip()
 
-# ---------------------------------------------------------
-# BUILD RETRIEVAL QA
-# ---------------------------------------------------------
-qa = RetrievalQA.from_chain_type(
-    llm=llm,
-    retriever=retriever,
-    chain_type="stuff",
-    return_source_documents=True
-)
-
-# ---------------------------------------------------------
-# STREAMLIT UI INPUT
-# ---------------------------------------------------------
-query = st.text_input("Ask an NCERT question:")
-
+# ----------------------------
+# STEP 6: Streamlit UI
+# ----------------------------
+query = st.text_input("Ask a question about NCERT content:")
 if query:
-    with st.spinner("Thinking..."):
-        response = qa({"query": query})
-
-        st.write("### ✅ Answer:")
-        st.write(response["result"])
-
-        st.write("### 📚 Sources:")
-        for src in response["source_documents"]:
-            st.write(src.metadata.get("source", "Unknown PDF"))
+    with st.spinner("Generating answer..."):
+        answer = generate_answer(query)
+        st.write("**Answer:**", answer)
