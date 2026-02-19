@@ -163,24 +163,14 @@ st.success("Vector index ready")
 # -----------------------------
 @st.cache_resource
 def load_generator():
-    device = 0 if torch.cuda.is_available() else -1
 
-    tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL_NAME)
-    model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL)
+    model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL)
 
-    if device == 0:
-        model = model.to("cuda")
+    model.eval()
 
-    generator = pipeline(
-        "text2text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        device=device
-    )
+    return tokenizer, model
 
-    return generator
-
-generator = load_generator()
 
 # -----------------------------
 # RETRIEVAL
@@ -223,22 +213,31 @@ def generate_answer(query):
     retrieved = retrieve(query)
 
     if not retrieved:
-        return "No relevant content found.", []
+        return "No relevant information found.", []
 
     prompt = build_prompt(retrieved, query)
 
-    output = generator(
+    inputs = tokenizer(
         prompt,
-        max_length=256,
-        do_sample=False
-    )[0]["generated_text"]
+        return_tensors="pt",
+        truncation=True,
+        max_length=1024
+    )
+
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_length=256
+        )
+
+    answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
     sources = [
         f"{r['doc_id']} ({r['chunk_id']})"
         for r in retrieved
     ]
 
-    return output.strip(), sources
+    return answer.strip(), sources
 
 # -----------------------------
 # USER INPUT
