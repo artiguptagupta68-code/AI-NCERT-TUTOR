@@ -163,13 +163,13 @@ st.success("Vector index ready")
 # -----------------------------
 @st.cache_resource
 def load_generator():
-
     tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL)
     model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL)
-
     model.eval()
-
     return tokenizer, model
+
+tokenizer, model = load_generator()
+
 
 
 # -----------------------------
