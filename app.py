@@ -208,7 +208,7 @@ if 'all_chunks' not in st.session_state:
 else:
     all_chunks = st.session_state['all_chunks']
 
-   @st.cache_resource(show_spinner=True)
+@st.cache_resource(show_spinner=True)
 def build_index(chunks):
     st.text("Creating embeddings in batches...")
 
