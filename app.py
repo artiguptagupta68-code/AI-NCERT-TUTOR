@@ -208,21 +208,41 @@ if 'all_chunks' not in st.session_state:
 else:
     all_chunks = st.session_state['all_chunks']
 
-    # Create embeddings only once
-    @st.cache_resource(show_spinner=True)
-    def build_index(chunks):
-        st.text("Creating embeddings. This may take a few minutes...")
-        embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-        texts = [c["text"] for c in chunks]
-        embeddings = embed_model.encode(texts, convert_to_numpy=True, show_progress_bar=True).astype("float32")
-        dim = embeddings.shape[1]
-        index = faiss.IndexFlatL2(dim)
-        index.add(embeddings)
-        metadata = [{"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]} for c in chunks]
-        st.text(f"FAISS index built with {len(chunks)} chunks.")
-        return embed_model, index, metadata
+   @st.cache_resource(show_spinner=True)
+def build_index(chunks):
+    st.text("Creating embeddings in batches...")
 
-    embed_model, index, metadata = build_index(all_chunks)
+    embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+
+    texts = [c["text"] for c in chunks]
+
+    batch_size = 64   # IMPORTANT
+    all_embeddings = []
+
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i+batch_size]
+        emb = embed_model.encode(
+            batch,
+            convert_to_numpy=True,
+            show_progress_bar=False
+        )
+        all_embeddings.append(emb)
+        st.text(f"Processed {i + len(batch)} / {len(texts)} chunks")
+
+    embeddings = np.vstack(all_embeddings).astype("float32")
+
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dim)
+    index.add(embeddings)
+
+    metadata = [
+        {"doc_id": c["doc_id"], "chunk_id": c["chunk_id"], "text": c["text"]}
+        for c in chunks
+    ]
+
+    st.text(f"FAISS index built with {len(chunks)} chunks.")
+    return embed_model, index, metadata
+
 
     # ---------------------------- STEP 7: Load generator ----------------------------
     @st.cache_resource(show_spinner=True)
