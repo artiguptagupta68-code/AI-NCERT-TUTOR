@@ -20,16 +20,16 @@ EXTRACT_DIR = "ncert_extracted"
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
 EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
-GEN_MODEL_NAME = "google/flan-t5-small"  # cloud safe
+GEN_MODEL_NAME = "google/flan-t5-small"  # Cloud safe
 TOP_K = 4
 BATCH_SIZE = 64
 
 # ==========================================================
-# PAGE
+# PAGE CONFIG
 # ==========================================================
 st.set_page_config(page_title="NCERT AI Tutor", layout="wide")
 st.title("📘 NCERT AI Tutor")
-st.caption("Ask questions from NCERT textbooks")
+st.caption("Ask questions from NCERT textbooks using Retrieval-Augmented Generation")
 
 # ==========================================================
 # DOWNLOAD + EXTRACT
@@ -37,7 +37,7 @@ st.caption("Ask questions from NCERT textbooks")
 @st.cache_resource
 def download_and_extract(file_id):
     if not os.path.exists(ZIP_PATH):
-        with st.spinner("Downloading NCERT data..."):
+        with st.spinner("Downloading NCERT dataset..."):
             gdown.download(
                 f"https://drive.google.com/uc?id={file_id}",
                 ZIP_PATH,
@@ -50,6 +50,7 @@ def download_and_extract(file_id):
 
     return EXTRACT_DIR
 
+
 data_path = download_and_extract(FILE_ID)
 
 # ==========================================================
@@ -57,7 +58,7 @@ data_path = download_and_extract(FILE_ID)
 # ==========================================================
 @st.cache_resource
 def load_documents(folder):
-    documents = []
+    docs = []
 
     for root, _, files in os.walk(folder):
         for file in files:
@@ -72,17 +73,18 @@ def load_documents(folder):
                             text += t + "\n"
 
                     if text.strip():
-                        documents.append({
+                        docs.append({
                             "doc_id": file,
                             "text": text
                         })
                 except:
                     continue
 
-    return documents
+    return docs
+
 
 documents = load_documents(data_path)
-st.success(f"Loaded {len(documents)} PDFs")
+st.success(f"Loaded {len(documents)} PDF files")
 
 # ==========================================================
 # CHUNKING
@@ -107,11 +109,12 @@ def split_documents(docs, chunk_size, overlap):
 
     return chunks
 
+
 all_chunks = split_documents(documents, CHUNK_SIZE, CHUNK_OVERLAP)
-st.success(f"Created {len(all_chunks)} chunks")
+st.success(f"Created {len(all_chunks)} text chunks")
 
 # ==========================================================
-# BUILD FAISS INDEX (BATCHED)
+# BUILD VECTOR INDEX (BATCHED)
 # ==========================================================
 @st.cache_resource(show_spinner=False)
 def build_index(chunks, model_name):
@@ -121,6 +124,7 @@ def build_index(chunks, model_name):
 
     all_embeddings = []
     total = len(texts)
+
     progress = st.progress(0)
 
     for i in range(0, total, BATCH_SIZE):
@@ -149,7 +153,7 @@ embed_model, index, metadata = build_index(all_chunks, EMBED_MODEL_NAME)
 st.success("Vector index ready")
 
 # ==========================================================
-# LOAD GENERATOR (NO PIPELINE)
+# LOAD GENERATION MODEL
 # ==========================================================
 @st.cache_resource
 def load_generator(model_name):
@@ -157,6 +161,7 @@ def load_generator(model_name):
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
     model.eval()
     return tokenizer, model
+
 
 tokenizer, model = load_generator(GEN_MODEL_NAME)
 
@@ -169,7 +174,7 @@ def retrieve(query, top_k=TOP_K):
     return [metadata[i] for i in I[0]]
 
 # ==========================================================
-# PROMPT
+# PROMPT BUILDER
 # ==========================================================
 def build_prompt(context_chunks, question):
 
@@ -177,7 +182,8 @@ def build_prompt(context_chunks, question):
 
     return f"""
 You are an AI tutor specializing in NCERT textbooks.
-Use the context to answer clearly and concisely.
+Answer ONLY using the provided context.
+Be clear and concise.
 
 Context:
 {context}
@@ -215,25 +221,24 @@ def generate_answer(query):
 
     answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    sources = [
-        f"{r['doc_id']} ({r['chunk_id']})"
-        for r in retrieved
-    ]
-
-    return answer.strip(), sources
+    return answer.strip(), retrieved
 
 # ==========================================================
-# UI
+# USER INTERFACE
 # ==========================================================
 query = st.text_input("Ask your question from NCERT:")
 
 if query:
     with st.spinner("Generating answer..."):
-        answer, sources = generate_answer(query)
+        answer, retrieved_chunks = generate_answer(query)
 
-    st.markdown("### 📖 Answer")
+    # Answer
+    st.markdown("## 📖 Answer")
     st.write(answer)
 
-    st.markdown("### 📚 Sources")
-    for s in sources:
-        st.write("-", s)
+    # Retrieved Context Section
+    st.markdown("## 📚 Top K Retrieved Chunks Used to Generate the Answer")
+
+    for i, chunk in enumerate(retrieved_chunks):
+        with st.expander(f"Chunk {i+1} — {chunk['doc_id']}"):
+            st.write(chunk["text"])
