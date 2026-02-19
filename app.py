@@ -161,14 +161,17 @@ st.success("Vector index ready")
 # -----------------------------
 # LOAD GENERATOR
 # -----------------------------
+GEN_MODEL = "google/flan-t5-small"   # define near top of file
+
 @st.cache_resource
-def load_generator():
-    tokenizer = AutoTokenizer.from_pretrained(GEN_MODEL)
-    model = AutoModelForSeq2SeqLM.from_pretrained(GEN_MODEL)
+def load_generator(model_name):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
     model.eval()
     return tokenizer, model
 
-tokenizer, model = load_generator()
+tokenizer, model = load_generator(GEN_MODEL)
+
 
 
 
