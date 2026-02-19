@@ -16,7 +16,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
-FILE_ID = "1gdiCsGOeIyaDlJ--9qon8VTya3dbjr6G"
+FILE_ID = "1toFD-1u6BSpdDU-cop12nne2ysPgPHM0"
 ZIP_PATH = "ncrt.zip"
 EXTRACT_DIR = "ncert_extracted"
 CHUNK_SIZE = 800
